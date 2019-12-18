@@ -38,6 +38,7 @@ in (self: super: let
     ergvein-wallet-types = ingnoreGarbage super.ergvein-wallet-types;
     ergvein-interface-ergo = ingnoreGarbage super.ergvein-interface-ergo;
     reflex-dom-retractable = ingnoreGarbage super.reflex-dom-retractable;
+    reflex-dom-core = lib.dontCheck (super.reflex-dom-core);
     reflex-external-ref = ingnoreGarbage super.reflex-external-ref;
     reflex-localize = ingnoreGarbage super.reflex-localize;
     # Overridess
