@@ -23,6 +23,7 @@ in reflex-platform.project ({ pkgs, ... }: {
     ergvein-wallet-types = ./wallet-types;
     ergvein-interface-ergo = ./interfaces/ergo;
     ergo-api = ./ergo-api;
+    haskoin-network = ./haskoin-network;
     reflex-dom-retractable = ./retractable;
     reflex-external-ref = ./reflex-external-ref;
     reflex-localize = ./reflex-localize;
@@ -39,6 +40,7 @@ in reflex-platform.project ({ pkgs, ... }: {
       "ergvein-wallet-types"
       "ergvein-interface-ergo"
       "ergo-api"
+      "haskoin-network"
       "reflex-dom-retractable"
       "reflex-external-ref"
       "reflex-localize"

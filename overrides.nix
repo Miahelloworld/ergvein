@@ -39,6 +39,7 @@ in (self: super: let
     ergvein-wallet-types = ingnoreGarbage super.ergvein-wallet-types;
     ergvein-interface-ergo = ingnoreGarbage super.ergvein-interface-ergo;
     ergo-api = ingnoreGarbage super.ergo-api;
+    haskoin-network = ingnoreGarbage super.haskoin-network;
     reflex-dom-retractable = ingnoreGarbage super.reflex-dom-retractable;
     reflex-external-ref = ingnoreGarbage super.reflex-external-ref;
     reflex-localize = ingnoreGarbage super.reflex-localize;
