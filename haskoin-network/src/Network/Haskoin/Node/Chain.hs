@@ -59,15 +59,14 @@ chain cfg inbox = do
                 , mySynced = False
                 , newPeers = []
                 }
-    let rd = ChainReader {myReader = cfg, myChainDB = db, chainState = st}
+    let rd = ChainReader {myReader = cfg, chainState = st}
     withSyncLoop ch $ run `runReaderT` rd
   where
     net = chainConfNetwork cfg
-    db = chainConfDB cfg
     ch = inboxToMailbox inbox
     run = do
         $(logDebugS) "Chain" "Initializing..."
-        initChainDB net
+        undefined
         getBestBlockHeader >>= chainEvent . ChainBestBlock
         $(logInfoS) "Chain" "Initialization complete"
         forever $ do
@@ -241,7 +240,6 @@ dataVersion = 1
 data ChainDataVersionKey = ChainDataVersionKey
     deriving (Eq, Ord, Show)
 
-
 instance Serialize ChainDataVersionKey where
     get = do
         guard . (== 0x92) =<< S.getWord8
@@ -298,56 +296,11 @@ data ChainReader a p = ChainReader
 
 instance (Monad m, MonadIO m, MonadReader (ChainReader a p) m) =>
          BlockHeaders m where
-    addBlockHeader bn = do
-        db <- asks myChainDB
-        R.insert db (BlockHeaderKey (headerHash (nodeHeader bn))) bn
-    getBlockHeader bh = do
-        db <- asks myChainDB
-        retrieve db def (BlockHeaderKey bh)
-    getBestBlockHeader = do
-        db <- asks myChainDB
-        retrieve db def BestBlockKey >>= \case
-            Nothing -> error "Could not get best block from database"
-            Just b -> return b
-    setBestBlockHeader bn = do
-        db <- asks myChainDB
-        R.insert db BestBlockKey bn
-    addBlockHeaders bns = do
-        db <- asks myChainDB
-        writeBatch db (map f bns)
-      where
-        f bn = insertOp (BlockHeaderKey (headerHash (nodeHeader bn))) bn
-
--- | Initialize header database. If version is different from current, the
--- database is purged of conflicting elements first.
-initChainDB :: (MonadChainLogic a p m, MonadUnliftIO m) => Network -> m ()
-initChainDB net = do
-    db <- asks myChainDB
-    ver <- retrieve db def ChainDataVersionKey
-    when (ver /= Just dataVersion) $ purgeChainDB >>= writeBatch db
-    R.insert db ChainDataVersionKey dataVersion
-    retrieve db def BestBlockKey >>= \b ->
-        when (isNothing (b :: Maybe BlockNode)) $ do
-            addBlockHeader (genesisNode net)
-            setBestBlockHeader (genesisNode net)
-
--- | Purge database of elements having keys that may conflict with those used in
--- this module.
-purgeChainDB :: (MonadChainLogic a p m, MonadUnliftIO m) => m [R.BatchOp]
-purgeChainDB = do
-    db <- asks myChainDB
-    runResourceT . R.withIterator db def $ \it -> do
-        R.iterSeek it $ B.singleton 0x90
-        recurse_delete it db
-  where
-    recurse_delete it db =
-        R.iterKey it >>= \case
-            Just k
-                | B.head k == 0x90 || B.head k == 0x91 -> do
-                    R.delete db def k
-                    R.iterNext it
-                    (R.Del k :) <$> recurse_delete it db
-            _ -> return []
+    addBlockHeader bn = undefined
+    getBlockHeader bh = undefined
+    getBestBlockHeader = undefined
+    setBestBlockHeader bn = undefined
+    addBlockHeaders bns = undefined
 
 -- | Import a bunch of continuous headers. Returns 'True' if the number of
 -- headers is 2000, which means that there are possibly more headers to sync

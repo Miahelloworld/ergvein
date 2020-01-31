@@ -120,18 +120,9 @@ withTestNode net str f =
     runNoLoggingT $
     withSystemTempDirectory ("haskoin-node-test-" <> str <> "-") $ \w -> do
         node_inbox <- newInbox
-        db <-
-            R.open
-                w
-                R.defaultOptions
-                    { R.createIfMissing = True
-                    , R.errorIfExists = True
-                    , R.compression = R.SnappyCompression
-                    }
         let cfg =
                 NodeConfig
                     { nodeConfMaxPeers = 20
-                    , nodeConfDB = db
                     , nodeConfPeers = []
                     , nodeConfDiscover = True
                     , nodeConfNetAddr = NetworkAddress 0 (sockToHostAddress (SockAddrInet 0 0))

@@ -94,8 +94,7 @@ node cfg mgr_inbox ch_inbox = do
         link mgr_async
         let chain_config =
                 ChainConfig
-                    { chainConfDB = nodeConfDB cfg
-                    , chainConfNetwork = nodeConfNet cfg
+                    { chainConfNetwork = nodeConfNet cfg
                     , chainConfEvents = chain_events
                     , chainConfTimeout = nodeConfTimeout cfg
                     }
