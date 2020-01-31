@@ -59,6 +59,7 @@ library
     , transformers
     , unliftio
     , unordered-containers
+    , deepseq
   default-language: Haskell2010
 
 test-suite spec

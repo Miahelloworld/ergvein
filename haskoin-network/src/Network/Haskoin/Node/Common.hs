@@ -2,6 +2,9 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving         #-}
 {-|
 Module      : Network.Haskoin.Node.Common
 Copyright   : No rights reserved
@@ -28,11 +31,16 @@ import           Network.Haskoin.Block
 import           Network.Haskoin.Constants
 import           Network.Haskoin.Network
 import           Network.Haskoin.Transaction
-import           Network.Socket              hiding (send)
+import           Network.Socket           hiding (send, HostAddress(..))
 import           NQE
 import           System.Random
 import           Text.Read
 import           UnliftIO
+import           Data.Serialize              as S
+import           Control.DeepSeq
+import           Data.ByteString             (ByteString)
+import           GHC.Generics                (Generic)
+import           Control.DeepSeq
 
 -- | Type alias for a combination of hostname and port.
 type HostPort = (Host, Port)
@@ -513,3 +521,52 @@ median ls
     | length ls `mod` 2 == 0 =
         Just . (/ 2) . sum . take 2 $ drop (length ls `div` 2 - 1) ls
     | otherwise = Just . head $ drop (length ls `div` 2) ls
+
+newtype HostAddress =
+    HostAddress ByteString
+    deriving (Eq, Show, Ord, Generic, NFData)
+
+instance Serialize HostAddress where
+    put (HostAddress bs) = putByteString bs
+    get = HostAddress <$> getByteString 18
+
+hostToSockAddr :: HostAddress -> SockAddr
+hostToSockAddr (HostAddress bs) =
+    case runGet getSockAddr bs of
+        Left e  -> error e
+        Right x -> x
+
+getSockAddr :: Get SockAddr
+getSockAddr = do
+    a <- getWord32be
+    b <- getWord32be
+    c <- getWord32be
+    if a == 0x00000000 && b == 0x00000000 && c == 0x0000ffff
+        then do
+            d <- getWord32host
+            p <- getWord16be
+            return $ SockAddrInet (fromIntegral p) d
+        else do
+            d <- getWord32be
+            p <- getWord16be
+            return $ SockAddrInet6 (fromIntegral p) 0 (a, b, c, d) 0
+
+sockToHostAddress :: SockAddr -> HostAddress
+sockToHostAddress = HostAddress . runPut . putSockAddr
+
+putSockAddr :: SockAddr -> Put
+putSockAddr (SockAddrInet6 p _ (a, b, c, d) _) = do
+    putWord32be a
+    putWord32be b
+    putWord32be c
+    putWord32be d
+    putWord16be (fromIntegral p)
+
+putSockAddr (SockAddrInet p a) = do
+    putWord32be 0x00000000
+    putWord32be 0x00000000
+    putWord32be 0x0000ffff
+    putWord32host a
+    putWord16be (fromIntegral p)
+
+putSockAddr _ = error "Invalid address type"

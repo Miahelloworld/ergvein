@@ -190,7 +190,7 @@ managerMessage (ManagerPeerMessage p (MAddr (Addr nas))) = do
         "Received " <> cs (show n) <> " addresses from peer " <> s
     mgrConfDiscover <$> asks myConfig >>= \case
         True -> do
-            let sas = map (undefined . naAddress . snd) nas
+            let sas = map (naAddress . snd) nas
             forM_ sas newPeer
         False ->
             $(logDebugS)
@@ -375,7 +375,7 @@ connectPeer sa = do
             nonce <- liftIO randomIO
             bb <- getBestBlock
             now <- round <$> liftIO getPOSIXTime
-            let rmt = NetworkAddress (srv net) (undefined sa)
+            let rmt = NetworkAddress (srv net) sa
                 ver = buildVersion net nonce bb ad rmt now
             (inbox, p) <- newMailbox
             let pc pub =

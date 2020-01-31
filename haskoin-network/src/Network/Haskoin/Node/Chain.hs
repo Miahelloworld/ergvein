@@ -66,7 +66,6 @@ chain cfg inbox = do
     ch = inboxToMailbox inbox
     run = do
         $(logDebugS) "Chain" "Initializing..."
-        undefined
         getBestBlockHeader >>= chainEvent . ChainBestBlock
         $(logInfoS) "Chain" "Initialization complete"
         forever $ do
