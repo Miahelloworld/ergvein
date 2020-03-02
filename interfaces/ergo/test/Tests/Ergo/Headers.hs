@@ -1,16 +1,27 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Tests.Ergo.Headers where
 
 import Test.Tasty.Hspec
 
+import Control.Lens
 import Control.Monad
+import Data.Aeson as A
 import Data.Either.Combinators
+import Data.Generics.Product.Fields
 import Data.Text (Text)
 
-import qualified Data.Serialize as Serialize
+import Data.ByteString.Lazy (ByteString,pack)
+import Development.IncludeFile (includeFileInSource,Word8)
+
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
+import qualified Data.Serialize as S
 import qualified Data.Text as T
 
+import Ergvein.Interfaces.Ergo.Api as Api
+import Ergvein.Interfaces.Ergo.Common.BigNat
 import Ergvein.Interfaces.Ergo.Header
 import Ergvein.Interfaces.Ergo.Scorex.Util.Package
 
@@ -20,12 +31,12 @@ spec_HeaderParser = do
 
   forM_ headerSamples $ \sample -> do
     it ("Parse Header from sample " <> (show $ T.take 8 sample <> "..")) $ do
-        (leftToMaybe . Serialize.decode @Header . fromHex $ sample)
+        (leftToMaybe . S.decode @Header . fromHex $ sample)
           `shouldBe` Nothing
 
   forM_ headerBadSamples $ \sample -> do
     it ("Do not parse Header from bad sample " <> (show $ T.take 8 sample <> "..")) $ do
-        (rightToMaybe . Serialize.decode @Header . fromHex $ sample)
+        (rightToMaybe . S.decode @Header . fromHex $ sample)
           `shouldBe` Nothing
 
 headerBadSamples :: [Text]
@@ -46,3 +57,46 @@ headerSamples = [
   , "b6c680cbff804800004f00007f7f003691ff01007f138080700040017f7f7f7fffbfc438fc74ff01800a7f007f7f8001b9ffe3768021187f7f017f00c9b301177f017f77360100ffa3ff22ff016c7f459180017f7f80b58001df35807f3c0d00d20000722df27f800101ff39806c01ff9a80ff0e1992857f32d8c2d9017fff7f15fff8b4d795aef787ec59b9010080547f01005a51ff739600005d47d89fac10001199a0631b8001019a34010200008995f5a204000000038b0f29a60fa8d7e1aeafbe512288a6c6bc696547bbf8247db23c95e83014513c022c65954f3487dee276b6e402deb17d8b454aff60fa2678c3168b9ec9ad6bee9321987f7049767dff20fffffffffffffffffffffffffffffffebaaedce6af48a03b3fd25e8cd0364140"
   , "ff006a00bb9e808d01005da8807f48ff009780841f1901006480950700b9ff8067ff010001c40180558001914e007fff7f00c0e3b1d6ffb880cbdd7b007f7fe559d80100720164cd001300bfff34addc547fdc7fbd08ff32804d807ff3f00031ff9aff8001f0cb80001f353ed918de0157ff5cff7f7f0100b180808100358029807ffe9292dae4f5f1b02cffc2c536c801ca4ad1737f1e36ce2db0ffe1ff0000d0ffffcf010017161f8e7a1002088eb78de0c906000000038b0f29a60fa8d7e1aeafbe512288a6c6bc696547bbf8247db23c95e83014513c0338e50f272e9f8515fa55fab6bf5d9b994a748cf1eeeee951061ba310f314b9a453d9ff08677fff5120fffffffffffffffffffffffffffffffebaaedce6af48a03b51af00eeeaf65a5c"
   ]
+
+
+$(includeFileInSource "test/data/full_block_2.json" "sampleFullBlock_2")
+
+sampleSerializedFullBlock_2 :: BS.ByteString
+sampleSerializedFullBlock_2 = "01b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b828b0f6a0e6cb98ed4649c6e4cc00599ae78755324c79a8cec51e94ecca339d7a3a11a92de9c0ba1e95068f39bc1e08afa4ca23dff16de135fac64d0cf7dd1ab6291b70477f591ee8efb8a962d36ddbe3ac57591e39fe45ffb8c51c4939e41980387d9cfe9ba2d6b46bcba6f750f5be67d89679e921b78c277c5546a08cdb0955376fa0ea271e30601176502000000033c46c7fd7085638bf4bc902badb4e5a1942d3251d92d0eddd6fbe5d57e91553703df646d7f6138aede718a2a4f1a76d4125750e8ab496b7a8a25292d07e14cbadb0000000a03d0d0191b06164a2e86a170f0d8ac96cffa2e3312f2f5b0b1c3b1e082b9a0cd"
+
+sampleBlockId_2 :: BS.ByteString
+sampleBlockId_2 = "855fc5c9eed868b43ea2c3df99ec17dd9d903187d891e2365a89b98125c994b2"
+
+sampleSerializedAutolukosSolution_2 :: BS.ByteString
+sampleSerializedAutolukosSolution_2 = "033c46c7fd7085638bf4bc902badb4e5a1942d3251d92d0eddd6fbe5d57e91553703df646d7f6138aede718a2a4f1a76d4125750e8ab496b7a8a25292d07e14cbadb0000000a03d0d0191b06164a2e86a170f0d8ac96cffa2e3312f2f5b0b1c3b1e082b9a0cd"
+
+spec_AutolukosSolutionsSerialize :: Spec
+spec_AutolukosSolutionsSerialize = do
+  it "Check AutolykosSolution serialization" $ do
+      fb <- either fail pure $ A.eitherDecode @FullBlock $ sampleFullBlock_2
+      let bh = Api.header fb
+          s = Api.powSolutions bh
+      (BS16.encode . S.encode) s `shouldBe` sampleSerializedAutolukosSolution_2
+
+spec_HeaderSerialize :: Spec
+spec_HeaderSerialize = do
+
+  it "Check Header serialization" $ do
+      fb <- either fail pure $ A.eitherDecode @FullBlock $ sampleFullBlock_2
+      let bh = Api.header fb
+          h = Api.headerFromApi bh
+      (BS16.encode . S.encode) h `shouldBe` sampleSerializedFullBlock_2
+
+spec_HeaderHash :: Spec
+spec_HeaderHash = do
+  it "Check header serialization and calculation of hash" $ do
+      fb <- either fail pure $ A.eitherDecode @FullBlock $ sampleFullBlock_2
+      let bh = Api.header fb
+          h = Api.headerFromApi bh
+      calculateHeaderId h `shouldBe` (bh ^. field @"headerId")
+
+spec_hashFn :: Spec
+spec_hashFn = do
+  it "Check hashFn of serialized block 2" $ do
+    (BS16.encode . hashFn . fst . BS16.decode) sampleSerializedFullBlock_2
+      `shouldBe` sampleBlockId_2
