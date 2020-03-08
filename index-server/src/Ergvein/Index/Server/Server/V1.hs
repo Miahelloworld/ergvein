@@ -4,6 +4,7 @@ import Data.Flat
 import Data.List
 import Data.Maybe
 import Data.Monoid
+import Data.Word
 import Database.Persist.Sql
 
 import Ergvein.Index.API
@@ -11,11 +12,12 @@ import Ergvein.Index.API.Types
 import Ergvein.Index.API.V1
 import Ergvein.Index.Server.Cache.Queries
 import Ergvein.Index.Server.Cache.Schema
-import Ergvein.Index.Server.DB.Schema
 import Ergvein.Index.Server.DB.Monad
 import Ergvein.Index.Server.DB.Queries
+import Ergvein.Index.Server.DB.Schema
 import Ergvein.Index.Server.Monad
 import Ergvein.Types.Currency
+import Ergvein.Types.Transaction
 
 indexServer :: IndexApi AsServerM
 indexServer = IndexApi
@@ -23,6 +25,7 @@ indexServer = IndexApi
     , indexGetBalance = indexGetBalanceEndpoint
     , indexGetTxHashHistory = indexGetTxHashHistoryEndpoint
     , indexGetBlockHeaders = indexGetBlockHeadersEndpoint
+    , indexGetBlockFilters = indexGetBlockFiltersEndpoint
     , indexGetTxMerkleProof = txMerkleProofEndpoint
     , indexGetTxHexView = txHexViewEndpoint
     , indexGetTxFeeHistogram = txFeeHistogramEndpoint
@@ -82,13 +85,25 @@ indexGetTxHashHistoryEndpoint request = do
     utxoHistoryTxIds (STXO (txo, stxo)) = [txOutCacheRecTxHash txo , txInCacheRecTxHash stxo]
     txSorting tx = (txCacheRecBlockHeight tx, txCacheRecBlockIndex  tx)
 
+getBlockMetaSlice :: Currency -> BlockHeight -> BlockHeight -> ServerM [BlockMetaCacheRec]
+getBlockMetaSlice currency startHeight endHeight = do
+  let start = cachedMetaKey (currency, startHeight) 
+      end   = BlockMetaCacheRecKey currency $ startHeight + endHeight
+  slice <- safeEntrySlice start end
+  let metaSlice = snd <$> slice
+  pure metaSlice
+
 indexGetBlockHeadersEndpoint :: BlockHeadersRequest -> ServerM BlockHeadersResponse
 indexGetBlockHeadersEndpoint request = do
-    let start = cachedMetaKey (headersReqCurrency request, headersReqStartIndex request)
-        end   = BlockMetaCacheRecKey (headersReqCurrency request) (pred $ headersReqStartIndex request + headersReqAmount request)
-    slice <- safeEntrySlice start end
-    let blockHeaders = snd <$> slice
+    slice <- getBlockMetaSlice (headersReqCurrency request) (headersReqStartHeight request) (headersReqAmount request)
+    let blockHeaders = blockMetaCacheRecHeaderHexView <$> slice
     pure blockHeaders
+
+indexGetBlockFiltersEndpoint :: BlockFiltersRequest -> ServerM BlockFiltersResponse
+indexGetBlockFiltersEndpoint request = do
+    slice <- getBlockMetaSlice (filtersReqCurrency request) (filtersReqStartHeight request) (filtersReqAmount request)
+    let blockFilters = blockMetaCacheRecAddressFilterHexView <$> slice
+    pure blockFilters
 
 txMerkleProofEndpoint :: TxMerkleProofRequest -> ServerM TxMerkleProofResponse
 txMerkleProofEndpoint TxMerkleProofRequest { merkleReqCurrency = BTC }  = pure btcProof

@@ -4,10 +4,17 @@ module Ergvein.Wallet.Util(
   , poke
   , sampleDyn
   , check
+  , dbgPrintE
+  , eventToNextFrame
+  , eventToNextFrame'
+  , eventToNextFrameN
+  , eventToNextFrameN'
   ) where
 
 import Control.Monad.Except
 import Reflex.Dom
+
+import Ergvein.Wallet.Monad
 
 -- | Same as 'widgetHold' but for dynamic
 widgetHoldDyn :: forall t m a . (DomBuilder t m, MonadHold t m) => Dynamic t (m a) -> m (Dynamic t a)
@@ -33,3 +40,25 @@ sampleDyn = sample . current
 check :: MonadError a m => a -> Bool -> m ()
 check a False = throwError a
 check _ True = pure ()
+
+dbgPrintE :: (MonadFrontBase t m, Show a) => Event t a -> m ()
+dbgPrintE = performEvent_ . fmap (liftIO . print)
+
+eventToNextFrame :: MonadWidget t m => Event t a -> m (Event t a)
+eventToNextFrame = performEvent . (fmap (liftIO . pure. id))
+
+eventToNextFrame' :: MonadWidget t m => m (Event t a) -> m (Event t a)
+eventToNextFrame' evtM = do
+  evt <- evtM
+  eventToNextFrame evt
+
+eventToNextFrameN :: MonadWidget t m => Int -> Event t a -> m (Event t a)
+eventToNextFrameN n evt
+  | n < 1     = do performEvent $ (fmap (liftIO . pure. id)) evt
+  | otherwise = do evtN <- performEvent $ (fmap (liftIO . pure. id)) evt
+                   eventToNextFrameN (n - 1) evtN
+
+eventToNextFrameN' :: MonadWidget t m => Int -> m (Event t a) -> m (Event t a)
+eventToNextFrameN' n evtM = do
+  evt <- evtM
+  eventToNextFrameN n evt

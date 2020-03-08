@@ -18,12 +18,13 @@ import Control.Monad
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Text (Text)
-import Ergvein.Crypto
+import Ergvein.Types.AuthInfo
+import Ergvein.Types.Storage
+import Ergvein.Wallet.Currencies
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Monad.Base
 import Ergvein.Wallet.Monad.Storage
 import Ergvein.Wallet.Settings
-import Ergvein.Wallet.Storage.Data
 import Language.Javascript.JSaddle
 import Reflex
 import Reflex.Dom hiding (run, mainWidgetWithCss)
@@ -31,14 +32,11 @@ import Reflex.Dom.Retractable.Class
 import Reflex.ExternalRef
 
 -- | Authorized context. Has access to storage and indexer's functionality
-type MonadFront t m = (MonadFrontBase t m, MonadStorage t m, MonadClient t m)
-
-data AuthInfo = AuthInfo {
-  authInfo'storage     :: ErgveinStorage
-, authInfo'eciesPubKey :: ECIESPubKey
-} deriving (Eq)
-
-type Password = Text
+type MonadFront t m = (
+    MonadFrontBase t m
+  , MonadStorage t m
+  , MonadClient t m
+  )
 
 class MonadFrontConstr t m => MonadFrontBase t m | m -> t where
   -- | Get current settings
@@ -60,6 +58,8 @@ class MonadFrontConstr t m => MonadFrontBase t m | m -> t where
   getUiChan :: m (Chan (IO ()))
   -- | Get langRef Internal
   getLangRef :: m (ExternalRef t Language)
+  -- | Get activeCursRef Internal
+  getActiveCursRef :: m (ExternalRef t ActiveCurrencies)
   -- | Return flag that comes 'True' as soon as user passes authoristion on server
   isAuthorized :: m (Dynamic t Bool)
   -- | Get authorization information that can be updated if user logs or logouts

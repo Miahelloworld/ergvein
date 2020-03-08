@@ -1,46 +1,48 @@
 { release ? false, isAndroid ? false }:
 let
-  reflex-platform = (import ./reflex-platform.nix) {
-    nixpkgsOverlays = [
-      (self: super: import ./nixpkgs-overlays/default.nix self super )
-    ];
-    config = {
-      android_sdk.accept_license = true;
-      allowBroken = true;
-    };
-  };
+   reflex-platform = import ./platform-overlay.nix;
 in reflex-platform.project ({ pkgs, ... }: {
   packages = {
+    data-merkle-tree = ./data-merkle-tree;
+    ergvein-checkpoint-generator = ./checkpoint-generator;
     ergvein-common = ./common;
     ergvein-crypto = ./crypto;
     ergvein-index-api = ./index-api;
     ergvein-index-client = ./index-client;
     ergvein-index-server = ./index-server;
+    ergvein-interface-ergo = ./interfaces/ergo;
     ergvein-wallet = ./wallet;
     ergvein-wallet-android = ./wallet-android;
     ergvein-wallet-desktop = ./wallet-desktop;
+    ergvein-wallet-filters = ./wallet-filters;
     ergvein-wallet-native = ./wallet-native;
     ergvein-wallet-types = ./wallet-types;
-    ergvein-interface-ergo = ./interfaces/ergo;
     ergo-api = ./ergo-api;
     haskoin-network = ./haskoin-network;
+    golomb-rice = ./golomb-rice;
     reflex-dom-retractable = ./retractable;
+    reflex-dom-canvas = ./reflex-dom-canvas;
     reflex-external-ref = ./reflex-external-ref;
     reflex-localize = ./reflex-localize;
   };
   shells = {
     ghc = [
+      "data-merkle-tree"
+      "ergo-api"
+      "ergvein-checkpoint-generator"
       "ergvein-common"
       "ergvein-crypto"
       "ergvein-index-api"
+      "ergvein-index-client"
       "ergvein-index-server"
-      "ergvein-wallet"
-      "ergvein-wallet-native"
-      "ergvein-wallet-desktop"
-      "ergvein-wallet-types"
       "ergvein-interface-ergo"
       "ergo-api"
       "haskoin-network"
+      "ergvein-wallet-desktop"
+      "ergvein-wallet-filters"
+      "ergvein-wallet-native"
+      "ergvein-wallet"
+      "golomb-rice"
       "reflex-dom-retractable"
       "reflex-external-ref"
       "reflex-localize"

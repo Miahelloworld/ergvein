@@ -49,12 +49,22 @@ type TxHashHistoryResponse = [TxHashHistoryItem]
 -- Headers
 data BlockHeadersRequest = BlockHeadersRequest
     { headersReqCurrency         :: !Currency
-    , headersReqStartIndex       :: !BlockHeight
+    , headersReqStartHeight       :: !BlockHeight
     , headersReqAmount           :: !Word64
     } deriving (Eq, Show, Generic)
 $(deriveJSON (aesonOptionsStripPrefix "headersReq") ''BlockHeadersRequest)
 
 type BlockHeadersResponse = [BlockHeaderHexView]
+
+-- Filters
+data BlockFiltersRequest = BlockFiltersRequest
+    { filtersReqCurrency         :: !Currency
+    , filtersReqStartHeight      :: !BlockHeight
+    , filtersReqAmount           :: !Word64
+    } deriving (Eq, Show, Generic)
+$(deriveJSON (aesonOptionsStripPrefix "filtersReq") ''BlockFiltersRequest)
+
+type BlockFiltersResponse = [AddressFilterHexView]
 
 -- Merkle
 data TxMerkleProofRequest = TxMerkleProofRequest
