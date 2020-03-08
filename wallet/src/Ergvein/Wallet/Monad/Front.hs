@@ -60,20 +60,20 @@ class MonadFrontConstr t m => MonadFrontBase t m | m -> t where
   getLangRef :: m (ExternalRef t Language)
   -- | Get activeCursRef Internal
   getActiveCursRef :: m (ExternalRef t ActiveCurrencies)
-  -- | Return flag that comes 'True' as soon as user passes authoristion on server
+  -- | Return flag that comes 'True' as soon as user passes authorization on server
   isAuthorized :: m (Dynamic t Bool)
   -- | Get authorization information that can be updated if user logs or logouts
   getAuthInfoMaybe :: m (Dynamic t (Maybe AuthInfo))
-  -- | Manually set authorisation information for context. Used by widgets that
-  -- implement actual login/logout. Some implementations may ingore 'Nothing'
-  -- values if their semantic require persistent authorisation.
+  -- | Manually set authorization information for context. Used by widgets that
+  -- implement actual login/logout. Some implementations may ignore 'Nothing'
+  -- values if their semantic require persistent authorization.
   setAuthInfo :: Event t (Maybe AuthInfo) -> m (Event t ())
-  -- | Get event and trigger for pasword requesting modal. Int -- id of the request.
+  -- | Get event and trigger for password requesting modal. Int -- id of the request.
   getPasswordModalEF :: m (Event t Int, Int -> IO ())
   -- | Get event and trigger for the event that the password was submitted from modal. Internal
   -- Nothing value means that the modal was dismissed
   getPasswordSetEF :: m (Event t (Int, Maybe Password), (Int, Maybe Password) -> IO ())
   -- | Proper requester of passwords. Use
-  requestPasssword :: Event t () -> m (Event t Password)
+  requestPassword :: Event t () -> m (Event t Password)
   -- | Internal method to get storage of auth info
   getAuthInfoRef :: m (ExternalRef t (Maybe AuthInfo))

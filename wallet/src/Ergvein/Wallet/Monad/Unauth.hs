@@ -156,7 +156,7 @@ instance (MonadBaseConstr t m, MonadRetract t m, PlatformNatives) => MonadFrontB
   {-# INLINE getPasswordModalEF #-}
   getPasswordSetEF = asks unauth'passSetEF
   {-# INLINE getPasswordSetEF #-}
-  requestPasssword reqE = do
+  requestPassword reqE = do
     idE <- performEvent $ liftIO getRandom <$ reqE
     idD <- holdDyn 0 idE
     (_, modalF) <- asks unauth'passModalEF

@@ -17,5 +17,5 @@ withWallet :: MonadFront t m
 withWallet reqE = do
   eps      <- getEncryptedPrivateStorage
   widgD    <- holdDyn Nothing $ Just <$> reqE
-  storageE <- handleDangerMsg . fmap (decryptPrivateStorage eps) =<< requestPasssword (() <$ reqE)
+  storageE <- handleDangerMsg . fmap (decryptPrivateStorage eps) =<< requestPassword (() <$ reqE)
   performEvent $ attachWithMaybe (\mwg wall -> mwg <*> pure wall) (current widgD) storageE
