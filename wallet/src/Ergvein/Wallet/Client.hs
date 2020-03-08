@@ -70,7 +70,7 @@ data ReqSignal a b = ReqFin a | ReqFailTimeout | ReqFailUrls | ReqTimeout b [a] 
 validateEq :: Eq a => [a] -> Either ClientMessage a
 validateEq rs = case L.nub rs of
   []    -> Left CMSEmpty
-  x:[]  -> Right x
+  [x]  -> Right x
   _     -> Left CMSValidationError
 
 -- Implements request logic:

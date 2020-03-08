@@ -40,12 +40,12 @@ loadActiveCurrencies = liftIO $ do
       let acpath = path <> "/currencies.yaml"
       ex <- liftIO $ doesFileExist acpath
       if not ex
-        then pure (ActiveCurrencies (Map.fromList []))
+        then pure $ ActiveCurrencies mempty
         else do
           mPT <- liftIO $ decodeFileStrict' acpath
           case mPT of
             Just p -> pure p
-            Nothing -> pure (ActiveCurrencies (Map.fromList []))
+            Nothing -> pure $ ActiveCurrencies mempty
 
 saveActiveCurrencies :: MonadIO m => ActiveCurrencies -> m ()
 saveActiveCurrencies ac = do
@@ -64,12 +64,12 @@ loadActiveCurrencies = liftIO $ do
   let acpath = home <> "/.ergvein/currencies.yaml"
   ex <- doesFileExist acpath
   if not ex
-    then pure (ActiveCurrencies (Map.fromList []))
+    then pure $ ActiveCurrencies mempty
     else do
       mPT <- liftIO $ decodeFileStrict' acpath
       case mPT of
         Just p -> pure p
-        Nothing -> pure (ActiveCurrencies (Map.fromList []))
+        Nothing -> pure $ ActiveCurrencies mempty
 
 saveActiveCurrencies :: MonadIO m => ActiveCurrencies -> m ()
 saveActiveCurrencies ac = liftIO $ do
