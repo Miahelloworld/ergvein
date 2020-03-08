@@ -33,12 +33,12 @@ accountDiscovery = do
 scanKeys :: MonadFront t m => PublicKeystore -> m (Event t PublicKeystore)
 scanKeys pubKeystore = do
   scanEvents <- traverse (applyScan pubKeystore) allCurrencies
-  let scanEvents' = [(M.fromList . (: []) <$> e) | e <- scanEvents]
+  let scanEvents' =  fmap (uncurry M.singleton) <$> scanEvents
       scanEvents'' = mergeWith M.union scanEvents'
-  newPubKeystoreD <- foldDyn M.union M.empty scanEvents''
+  newPubKeystoreD <- foldDyn M.union mempty scanEvents''
   let newPubKeystoreDUpdatedE = updated newPubKeystoreD
       allFinishedE = flip push newPubKeystoreDUpdatedE $ \updatedKeystore -> do
-        pure $ if M.size updatedKeystore == length allCurrencies then Just $ updatedKeystore else Nothing
+        pure $ if M.size updatedKeystore == length allCurrencies then Just updatedKeystore else Nothing
   pure allFinishedE
 
 -- TODO: use M.lookup instead of M.! and show error msg if currency not found
