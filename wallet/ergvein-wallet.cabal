@@ -176,7 +176,14 @@ library
         unliftio-core >= 0.1 && < 0.2,
         validation >=1 && < 1.2,
         vector -any,
-        yaml -any
+        yaml -any,
+        haskoin-network,
+        haskoin-core,
+        network,
+        nqe,
+        monad-logger,
+        unliftio,
+        transformers
 
     if flag(android)
         cpp-options: -DANDROID

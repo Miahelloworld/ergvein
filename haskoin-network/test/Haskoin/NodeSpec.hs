@@ -11,7 +11,6 @@ import           Control.Monad
 import           Control.Monad.Logger
 import           Control.Monad.Trans
 import           Data.Maybe
-import qualified Database.RocksDB     as R
 import           Haskoin
 import           Haskoin.Node
 import           Network.Socket       (SockAddr (..))
