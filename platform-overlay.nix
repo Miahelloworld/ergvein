@@ -4,6 +4,7 @@
     ];
     config = {
       android_sdk.accept_license = true;
+      oraclejdk.accept_license = true;
       allowBroken = true;
     };
 }
