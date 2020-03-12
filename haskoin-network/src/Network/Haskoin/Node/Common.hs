@@ -551,9 +551,6 @@ getSockAddr = do
             p <- getWord16be
             return $ SockAddrInet6 (fromIntegral p) 0 (a, b, c, d) 0
 
-sockToHostAddress :: SockAddr -> HostAddress
-sockToHostAddress = HostAddress . runPut . putSockAddr
-
 putSockAddr :: SockAddr -> Put
 putSockAddr (SockAddrInet6 p _ (a, b, c, d) _) = do
     putWord32be a
