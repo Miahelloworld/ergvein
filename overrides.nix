@@ -41,7 +41,7 @@ in (self: super: let
     ergvein-wallet-filters = ingnoreGarbage super.ergvein-wallet-filters;
     ergvein-wallet-native = ingnoreGarbage super.ergvein-wallet-native;
     ergvein-wallet-types = ingnoreGarbage super.ergvein-wallet-types;
-    haskoin-network = ingnoreGarbage super.haskoin-network;
+    haskoin-network = lib.dontCheck (ingnoreGarbage super.haskoin-network);
     ergo-api = lib.dontCheck (ingnoreGarbage super.ergo-api);
     golomb-rice = ingnoreGarbage super.golomb-rice;
     reflex-dom-retractable = ingnoreGarbage super.reflex-dom-retractable;
