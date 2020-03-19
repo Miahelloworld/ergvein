@@ -48,7 +48,7 @@ in reflex-platform.project ({ pkgs, ... }: {
   overrides = import ./overrides.nix { inherit reflex-platform; };
 
   shellToolOverrides = ghc: super: {
-    inherit (pkgs) postgresql leveldb;
+    inherit (pkgs) postgresql_ergvein leveldb;
   };
 
   android.ergvein-wallet = {
