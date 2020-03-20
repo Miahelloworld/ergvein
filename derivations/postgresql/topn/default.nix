@@ -1,32 +1,32 @@
 { stdenv, fetchFromGitHub, postgresql, protobufc }:
 
 stdenv.mkDerivation rec {
-  pname = "cstore_fdw";
-  version = "1.6.2";
+  name = "pg_topn-${version}";
+  version = "2.0.2";
 
   nativeBuildInputs = [ protobufc ];
   buildInputs = [ postgresql ];
 
   src = fetchFromGitHub {
     owner  = "citusdata";
-    repo   = "cstore_fdw";
+    repo   = "postgresql-topn";
     rev    = "refs/tags/v${version}";
-    sha256 = "0kdmzpbhhjdg4p6i5963h7qbs88jzgpqc52gz450h7hwb9ckpv74";
+    sha256 = "00hc3hgnqv9xaalizbcvprb7s55sydj2qgk3rhgrdlwg2g025h62";
   };
 
   installPhase = ''
-    mkdir -p $out/{lib,share/postgresql/extension}
+    mkdir -p $out/{lib,share/extension}
 
     cp *.so      $out/lib
-    cp *.sql     $out/share/postgresql/extension
-    cp *.control $out/share/postgresql/extension
+    cp *.sql     $out/share/extension
+    cp *.control $out/share/extension
   '';
 
   meta = with stdenv.lib; {
-    description = "Columnar storage for PostgreSQL";
+    description = "Efficient querying of 'top values' for PostgreSQL";
     homepage    = https://www.citusdata.com/;
     maintainers = with maintainers; [ thoughtpolice ];
-    platforms   = postgresql.meta.platforms;
-    license     = licenses.asl20;
+    platforms   = platforms.linux;
+    license     = licenses.agpl3;
   };
 }

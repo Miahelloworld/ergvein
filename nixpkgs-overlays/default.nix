@@ -6,7 +6,5 @@ self: super: rec
   zlibSys = self.callPackage ../derivations/zlibSys.nix {};
   lmdbSys = self.callPackage ../derivations/lmdb.nix {};
 
-  postgresql_ergvein = let 
-    pg = (import ../derivations/postgresql self).postgresql_9_6;
-    in pg.override { this = postgresql_ergvein; };
+  postgresql_ergvein = (import ../derivations/postgresql self).postgresql94;
 }

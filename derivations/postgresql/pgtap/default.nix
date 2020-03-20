@@ -1,20 +1,20 @@
 { stdenv, fetchFromGitHub, postgresql, perl, perlPackages, which }:
 
 stdenv.mkDerivation rec {
-  pname = "pgtap";
-  version = "1.0.0";
+  name = "pgtap-${version}";
+  version = "0.98.0";
 
   src = fetchFromGitHub {
     owner = "theory";
     repo = "pgtap";
     rev = "v${version}";
-    sha256 = "0ks53lsrpa8yxav8jh0jlvs25y6p7mkcdch8il1kvib9k5zq2wnb";
+    sha256 = "17r3b409k05pbypmwdwgm1fl669jc6a1391szyxizx784k44a369";
   };
 
   nativeBuildInputs = [ postgresql perl perlPackages.TAPParserSourceHandlerpgTAP which ];
 
   installPhase = ''
-    install -D {sql/pgtap--${version}.sql,pgtap.control} -t $out/share/postgresql/extension
+    install -D {sql/pgtap--${version}.sql,pgtap.control} -t $out/share/extension
   '';
 
   meta = with stdenv.lib; {
@@ -28,6 +28,5 @@ stdenv.mkDerivation rec {
     maintainers = with maintainers; [ willibutz ];
     homepage = https://pgtap.org;
     inherit (postgresql.meta) platforms;
-    license = licenses.mit;
   };
 }

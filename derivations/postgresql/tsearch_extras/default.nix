@@ -1,22 +1,23 @@
 { stdenv, fetchFromGitHub, pkgconfig, postgresql }:
 
-stdenv.mkDerivation {
-  pname = "tsearch-extras";
-  version = "0.4";
+stdenv.mkDerivation rec {
+  name = "tsearch-extras-${version}";
+  version = "0.3";
 
   src = fetchFromGitHub {
-    owner  = "zulip";
-    repo   = "tsearch_extras";
-    rev    = "84e78f00931c4ef261d98197d6b5d94fc141f742"; # no release tag?
-    sha256 = "18j0saqblg3jhrz38splk173xjwdf32c67ymm18m8n5y94h8d2ba";
+    owner = "zulip";
+    repo = "tsearch_extras";
+    rev = version;
+    sha256 = "0i3i99lw80jwd4xflgdqabxmn1dnm1gm7dzf1mqv2drllxcy3yix";
   };
 
   nativenativeBuildInputs = [ pkgconfig ];
   buildInputs = [ postgresql ];
 
   installPhase = ''
+    mkdir -p $out/bin
     install -D tsearch_extras.so -t $out/lib/
-    install -D ./{tsearch_extras--1.0.sql,tsearch_extras.control} -t $out/share/postgresql/extension
+    install -D ./{tsearch_extras--1.0.sql,tsearch_extras.control} -t $out/share/extension
   '';
 
   meta = with stdenv.lib; {
