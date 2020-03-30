@@ -18,7 +18,7 @@ import           Network.Haskoin.Block (BlockHeight)
 -- | Sum type that encapsulates filters for different currencies
 data AddrFilter =
     AddrFilterBtc !BtcAddrFilter
-  | AddrFilterErgo !!ErgoAddrFilter
+  | AddrFilterErgo !ErgoAddrFilter
   deriving (Show, Generic)
 
 -- | Helper tag that binds currency with specific filter type. It is tused in
@@ -26,12 +26,12 @@ data AddrFilter =
 -- currency only.
 data AddrFilterTag a where
   AFBtc  :: AddrFilterTag (BtcAddress, BtcAddrFilter)
-  AFErgo :: AddrFilterTag (ErgoAddress, ErgoAddrFilter) -- TODO add ergo filter here
+  AFErgo :: AddrFilterTag (ErgoAddress, ErgAddrFilter) -- TODO add ergo filter here
 
 -- | Match currencies in filter and address and return `Just` if they are equal.
 matchAddrFilter :: EgvAddress -> AddrFilter -> Maybe (DSum AddrFilterTag Identity)
 matchAddrFilter addr f = case f of
   AddrFilterBtc btcf -> case addr of
     BtcAddress btca -> Just $ AFBtc :=> Identity (btca, btcf)
-    _ -> Nothing
+    _ -> NothingFCL
   AddrFilterErgo _ -> Nothing -- TODO add ergo here

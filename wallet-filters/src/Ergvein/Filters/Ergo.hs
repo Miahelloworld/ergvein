@@ -68,25 +68,25 @@ encodeSegWitAddress n = T.encodeUtf8 . addrToString n . fromSegWit
 
 -- | Default value for P parameter (amount of bits in golomb rice encoding).
 -- Set to fixed `19` according to BIP-158.
-ErgoDefP :: Int
-ErgoDefP = 19
+ergoDefP :: Int
+ergoDefP = 19
 
 -- | Default value for M parameter (the target false positive rate).
 -- Set to fixed `784931` according to BIP-158.
-ErgoDefM :: Word64
-ErgoDefM = 784931
+ergoDefM :: Word64
+ergoDefM = 784931
 
 -- | BIP 158 filter that tracks only Bech32 SegWit addresses that are used in specific block.
 data ErgoAddrFilter = ErgoAddrFilter {
-  ErgoAddrFilterN   :: !Word64 -- ^ the total amount of items in filter
-, ErgoAddrFilterGcs :: !GCS -- ^ Actual encoded golomb encoded set
+  ergoAddrFilterN   :: !Word64 -- ^ the total amount of items in filter
+, ergoAddrFilterGcs :: !GCS -- ^ Actual encoded golomb encoded set
 } deriving (Show, Generic)
 
 -- | Encoding filter as simple <length><gcs>
 encodeErgoAddrFilter :: ErgoAddrFilter -> ByteString
 encodeErgoAddrFilter ErgoAddrFilter {..} =
-  BSL.toStrict . B.toLazyByteString $ B.word64BE ErgoAddrFilterN <> B.byteString
-    (encodeGcs ErgoAddrFilterGcs)
+  BSL.toStrict . B.toLazyByteString $ B.word64BE ergoAddrFilterN <> B.byteString
+    (encodeGcs ergoAddrFilterGcs)
 
 -- | Decoding filter from raw bytes
 decodeErgoAddrFilter :: ByteString -> Either String ErgoAddrFilter
@@ -95,7 +95,7 @@ decodeErgoAddrFilter = A.parseOnly (parser <* A.endOfInput)
   parser =
     ErgoAddrFilter
       <$> A.anyWord64be
-      <*> fmap (decodeGcs ErgoDefP) A.takeByteString
+      <*> fmap (decodeGcs ergoDefP) A.takeByteString
 
 
 instance B.Binary ErgoAddrFilter where
@@ -116,8 +116,8 @@ type InputTxs = [Tx]
 -- Network argument controls whether we are in testnet or mainnet.
 makeErgoFilter :: Network -> InputTxs -> Block -> ErgoAddrFilter
 makeErgoFilter net intxs block = ErgoAddrFilter
-  { ErgoAddrFilterN   = n
-  , ErgoAddrFilterGcs = constructGcs ErgoDefP sipkey ErgoDefM totalSet
+  { ergoAddrFilterN   = n
+  , ergoAddrFilterGcs = constructGcs ergoDefP sipkey ergoDefM totalSet
   }
  where
   makeSegWitSet = fmap (encodeSegWitAddress net) . catMaybes . concatMap
@@ -148,11 +148,11 @@ blockSipHash = fromBs . BS.reverse . encode . getBlockHash
 
 -- | Check that given address is located in the filter.
 applyErgoFilter :: Network -> BlockHash -> ErgoAddrFilter -> SegWitAddress -> Bool
-applyErgoFilter net bhash ErgoAddrFilter {..} addr = matchGcs ErgoDefP
+applyErgoFilter net bhash ErgoAddrFilter {..} addr = matchGcs ergoDefP
                                                             sipkey
-                                                            ErgoDefM
-                                                            ErgoAddrFilterN
-                                                            ErgoAddrFilterGcs
+                                                            ergoDefM
+                                                            ergoAddrFilterN
+                                                            ergoAddrFilterGcs
                                                             item
  where
   item   = encodeSegWitAddress net addr
