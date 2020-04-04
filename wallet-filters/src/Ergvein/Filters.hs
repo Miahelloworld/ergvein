@@ -11,6 +11,7 @@ where
 import           Data.Dependent.Sum
 import           Data.Functor.Identity
 import           Ergvein.Filters.Btc
+import           Ergvein.Filters.Ergo
 import           Ergvein.Types.Address
 import           GHC.Generics
 import           Network.Haskoin.Block (BlockHeight)
@@ -26,12 +27,12 @@ data AddrFilter =
 -- currency only.
 data AddrFilterTag a where
   AFBtc  :: AddrFilterTag (BtcAddress, BtcAddrFilter)
-  AFErgo :: AddrFilterTag (ErgoAddress, ErgAddrFilter) -- TODO add ergo filter here
+  AFErgo :: AddrFilterTag (ErgAddress, ErgoAddrFilter) -- TODO add ergo filter here
 
 -- | Match currencies in filter and address and return `Just` if they are equal.
 matchAddrFilter :: EgvAddress -> AddrFilter -> Maybe (DSum AddrFilterTag Identity)
 matchAddrFilter addr f = case f of
   AddrFilterBtc btcf -> case addr of
     BtcAddress btca -> Just $ AFBtc :=> Identity (btca, btcf)
-    _ -> NothingFCL
+    _ -> Nothing
   AddrFilterErgo _ -> Nothing -- TODO add ergo here
