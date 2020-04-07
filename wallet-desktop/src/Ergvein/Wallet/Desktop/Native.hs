@@ -12,6 +12,7 @@ import System.Directory.Tree
 import System.FilePath.Posix
 import System.Hclip
 import System.IO
+import System.X509 (getSystemCertificateStore)
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
@@ -90,7 +91,15 @@ instance PlatformNatives where
 
   shareUrl = liftIO . setClipboard . T.unpack
 
+  -- TODO: Fix later for desktop application
+  cameraWork = liftIO . setClipboard . T.unpack
+
+  -- TODO: Fix later for desktop application
+  cameraGetResult = liftIO $ pure "TempDesktop"
+
   logWrite = liftIO . T.putStrLn
+ 
+  readSystemCertificates = liftIO getSystemCertificateStore
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles dir = do

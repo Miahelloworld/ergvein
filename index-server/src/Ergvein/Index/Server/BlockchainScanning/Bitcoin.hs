@@ -10,7 +10,7 @@ import           Data.Serialize
 import           Network.Bitcoin.Api.Blockchain
 import           Network.Bitcoin.Api.Client
 
-import           Ergvein.Crypto.SHA256
+import           Ergvein.Crypto.Hash
 import           Ergvein.Filters.Btc
 import           Ergvein.Index.Server.BlockchainScanning.Types
 import           Ergvein.Index.Server.Cache.Monad
@@ -19,6 +19,7 @@ import           Ergvein.Index.Server.Cache.Schema
 import           Ergvein.Index.Server.Config
 import           Ergvein.Index.Server.Environment
 import           Ergvein.Index.Server.Utils
+import           Ergvein.Text
 import           Ergvein.Types.Currency
 import           Ergvein.Types.Transaction
 
@@ -31,9 +32,7 @@ import qualified Network.Haskoin.Crypto             as HK
 import qualified Network.Haskoin.Transaction        as HK
 import qualified Network.Haskoin.Util               as HK
 
-instance MonadLDB (ReaderT ServerEnv IO) where
-  getDb = asks envLevelDBContext
-  {-# INLINE getDb #-}
+import Ergvein.Index.Server.BlockchainScanning.BitcoinApiMonad
 
 txInfo :: HK.Tx -> TxHash -> ([TxInInfo], [TxOutInfo])
 txInfo tx txHash = let
@@ -47,7 +46,7 @@ txInfo tx txHash = let
                   , txInTxOutIndex = fromIntegral $ HK.outPointIndex prevOutput
                   }
     txOutInfo txOutIndex txOut = let
-      scriptOutputHash = encodeSHA256Hex . doubleSHA256
+      scriptOutputHash = showt . doubleSHA256
       in TxOutInfo { txOutTxHash           = txHash
                    , txOutPubKeyScriptHash = scriptOutputHash $ HK.scriptOutput txOut
                    , txOutIndex            = fromIntegral txOutIndex
@@ -89,20 +88,22 @@ blockTxInfos block txBlockHeight nodeNetwork = do
       (txInI,txOutI) = txInfo tx txHash'
       in ([txI], txInI, txOutI)
 
-actualHeight :: Config -> IO BlockHeight
-actualHeight cfg = fromIntegral <$> btcNodeClient cfg getBlockCount
+--actualHeight :: Config -> IO BlockHeight
+--actualHeight cfg = fromIntegral <$> btcNodeClient cfg getBlockCount
 
-blockInfo :: ServerEnv -> BlockHeight -> IO BlockInfo
-blockInfo env blockHeightToScan = flip runReaderT env $ do
-  blockHash <- liftIO $ btcNodeClient cfg $ flip getBlockHash $ fromIntegral blockHeightToScan
-  maybeRawBlock <- liftIO $ btcNodeClient cfg $ flip getBlockRaw blockHash
+actualHeight :: (Monad m, BitcoinApiMonad m) => m BlockHeight
+actualHeight = fromIntegral <$> nodeRpcCall getBlockCount
+
+blockInfo :: (BitcoinApiMonad m,  HasBitcoinNodeNetwork m, MonadLDB m) => BlockHeight -> m BlockInfo
+blockInfo blockHeightToScan =  do
+  blockHash <- nodeRpcCall $ flip getBlockHash $ fromIntegral blockHeightToScan
+  maybeRawBlock <- nodeRpcCall $ flip getBlockRaw blockHash
   let rawBlock = fromMaybe blockParsingError maybeRawBlock
       parsedBlock = fromRight blockGettingError $ decode $ HS.toBytes rawBlock
-      currentNetwork = envBitconNodeNetwork env
+  
+  currentNetwork <- currentBitcoinNetwork 
   
   blockTxInfos parsedBlock blockHeightToScan currentNetwork
   where
-    cfg    = envServerConfig env
-    dbPool = envPersistencePool env
     blockGettingError = error $ "Error getting BTC node at height " ++ show blockHeightToScan
     blockParsingError = error $ "Error parsing BTC node at height " ++ show blockHeightToScan

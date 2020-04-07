@@ -6,6 +6,7 @@ module Ergvein.Wallet.Page.Info(
 import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Id
@@ -20,39 +21,35 @@ import Ergvein.Wallet.Wrapper
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
-import Network.Haskoin.Keys
 
 infoPage :: MonadFront t m => Currency -> m ()
-infoPage cur = do
-  let thisWidget = Just $ pure $ infoPage cur
-  menuWidget (InfoTitle cur) thisWidget
-  wrapper False $ divClass "info-content" $ do
-    walName <- getWalletName
-    textLabel NameWallet $ text walName
-    vertSpacer
+infoPage cur = wrapper (InfoTitle cur) (Just $ pure $ infoPage cur) False $ divClass "info-content" $ do
+  walName <- getWalletName
+  textLabel NameWallet $ text walName
+  vertSpacer
 
-    settings <- getSettings
-    let setUs = getSettingsUnits settings
+  settings <- getSettings
+  let setUs = getSettingsUnits settings
 
-    bal <- currencyBalance cur
-    let balD = (\v -> showMoneyUnit v setUs) <$> bal
-    balVal <- sample . current $ balD
-    textLabel TotalBalance $ text balVal
-    vertSpacer
+  bal <- currencyBalance cur
+  let balD = (\v -> showMoneyUnit v setUs) <$> bal
+  balVal <- sample . current $ balD
+  textLabel TotalBalance $ text balVal
+  vertSpacer
 
-    balCfrm <- currencyBalanceConfirm cur
-    let balCfrmD = (\v -> showMoneyUnit v setUs) <$> balCfrm
-    balCfrmVal <- sample . current $ balCfrmD
-    textLabel ConfirmedBalance $ text balCfrmVal
-    vertSpacer
+  balCfrm <- currencyBalanceConfirm cur
+  let balCfrmD = (\v -> showMoneyUnit v setUs) <$> balCfrm
+  balCfrmVal <- sample . current $ balCfrmD
+  textLabel ConfirmedBalance $ text balCfrmVal
+  vertSpacer
 
-    pks :: PublicKeystore <- getPublicKeystore
-    let masterPKeyMb = (xPubExport (getCurrencyNetwork cur)  . egvXPubKey . egvPubKeyсhain'master) <$> M.lookup cur pks
-        partsPKey = T.chunksOf 20 $ fromMaybe "" masterPKeyMb
-    textLabel MasterPublicKey $ mapM_ (\v -> text v >> br) partsPKey
-    pure ()
-    where
-      getSettingsUnits = fromMaybe defUnits . settingsUnits
+  pks :: PublicKeystore <- getPublicKeystore
+  let masterPKeyMb = (xPubExport (getCurrencyNetwork cur) . egvXPubKey . egvPubKeyсhain'master) <$> M.lookup cur pks
+      partsPKey = T.chunksOf 20 $ fromMaybe "" masterPKeyMb
+  textLabel MasterPublicKey $ mapM_ (\v -> text v >> br) partsPKey
+  pure ()
+  where
+    getSettingsUnits = fromMaybe defUnits . settingsUnits
 
 textLabel :: (MonadFrontBase t m, LocalizedPrint l)
   => l -- ^ Label

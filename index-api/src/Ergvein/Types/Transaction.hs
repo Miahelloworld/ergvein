@@ -13,6 +13,9 @@ type TxHexView = Text
 -- | Number of blocks before current one, from the starting from Genesis block with height of zero
 type BlockHeight = Word64
 
+-- | Hash of block (usually header only) that identifies block.
+type BlockHash = Text 
+
 -- | Index of the transaction in block
 type TxBlockIndex = Word
 
@@ -34,3 +37,8 @@ type TxHash = Text
 
 -- | Index of the UTXO
 type TxOutIndex = Word
+
+-- | index of the first block in blockchain
+currencyHeightStart :: Currency -> BlockHeight
+currencyHeightStart = \case BTC  -> 0
+                            ERGO -> 1

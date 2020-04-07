@@ -5,21 +5,21 @@ import  Data.List.Index
 import  Data.Maybe
 import  Data.Serialize
 
-import Ergvein.Crypto.SHA256
+import Ergvein.Crypto.Hash
 import Ergvein.Index.Server.BlockchainScanning.Types
 import Ergvein.Index.Server.Environment
 import Ergvein.Interfaces.Ergo.Api
 import Ergvein.Interfaces.Ergo.It.Api.NodeApi
 import Ergvein.Interfaces.Ergo.Scorex.Core.Block
+import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Transaction
-import Ergvein.Text
 
 import           Network.Ergo.Api.Blocks
 import           Network.Ergo.Api.Client
 import           Network.Ergo.Api.Info
 import qualified Network.Ergo.Api.Utxo    as UtxoApi
-
+import Control.Monad.IO.Unlift
 
 txInfo :: ApiMonad m => ErgoTransaction -> TxHash -> m ([TxInInfo], [TxOutInfo])
 txInfo tx txHash = do
@@ -36,7 +36,7 @@ txInfo tx txHash = do
                       }
 
     txOutInfo txOut = let
-      scriptOutputHash = encodeSHA256Hex . doubleSHA256
+      scriptOutputHash = showt . doubleSHA256
       in TxOutInfo { txOutTxHash           = txHash
                    , txOutPubKeyScriptHash = scriptOutputHash $ unErgoTree $ ergoTree txOut
                    , txOutIndex            = fromIntegral $ fromJust $ index txOut
@@ -47,7 +47,7 @@ blockTxInfos :: ApiMonad m => FullBlock -> BlockHeight -> m BlockInfo
 blockTxInfos block txBlockHeight = do
   (txInfos ,txInInfos, txOutInfos) <- mconcat <$> (sequence $ txoInfosFromTx `imap` (transactions $ blockTransactions block))
   let blockContent = BlockContentInfo txInfos txInInfos txOutInfos
-      blockAddressFilter = const "ergoBlockAddressFilter" $ undefined
+      blockAddressFilter = mempty
       blockMeta = BlockMetaInfo ERGO (fromIntegral txBlockHeight) blockHeaderHexView blockAddressFilter
   pure $ BlockInfo blockMeta blockContent
   where
@@ -63,13 +63,13 @@ blockTxInfos block txBlockHeight = do
       (txInI,txOutI) <- txInfo tx txHash
       pure ([txI], txInI, txOutI)
 
-actualHeight :: ServerEnv -> IO BlockHeight
-actualHeight env = do
-    info <- runReaderT getInfo (envErgoNodeClient env)
+actualHeight :: ApiMonad m => m BlockHeight
+actualHeight = do
+    info <- getInfo
     pure $ fromIntegral $ fromMaybe 0 $ bestBlockHeight info
 
-blockInfo :: ServerEnv -> BlockHeight -> IO BlockInfo
-blockInfo env blockHeightToScan = flip runReaderT (envErgoNodeClient env) $ do
+blockInfo :: ApiMonad m  => BlockHeight -> m BlockInfo
+blockInfo blockHeightToScan = do
   headersAtHeight <- getHeaderIdsAtHeight
       $ Height
       $ fromIntegral blockHeightToScan

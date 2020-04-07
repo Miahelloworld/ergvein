@@ -7,6 +7,7 @@ import Control.Exception (handle, bracket, SomeException)
 import Control.Monad.IO.Class
 import Data.Text(Text, unpack)
 import Ergvein.Aeson
+import Ergvein.Wallet.Android.Native.Certs
 import Ergvein.Wallet.Native
 import Foreign
 import Foreign.C
@@ -14,6 +15,7 @@ import System.Directory
 import System.Directory.Tree
 import System.FilePath.Posix
 import System.IO
+import System.X509.Android
 
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
@@ -31,6 +33,9 @@ foreign import ccall safe "android_log_write" androidLogWrite :: CString -> IO (
 foreign import ccall safe "android_timezone_offset" androidTimezoneOffset :: IO Int
 
 foreign import ccall safe "android_share_url" androidShareUrl :: HaskellActivity -> CString -> IO ()
+
+foreign import ccall safe "android_camera_open" androidCameraOpen :: HaskellActivity -> CString -> IO ()
+foreign import ccall safe "android_camera_get_result" androidCameraGetResult :: HaskellActivity -> IO CString
 
 decodeText :: CString -> IO Text
 decodeText cstr = do
@@ -132,8 +137,19 @@ instance PlatformNatives where
     a <- getHaskellActivity
     androidShareUrl a s
 
+  cameraWork v = liftIO $ encodeText v $ \s -> do
+    a <- getHaskellActivity
+    androidCameraOpen a s
+
+  cameraGetResult = liftIO $ do
+    a <- getHaskellActivity
+    r <- androidCameraGetResult a
+    decodeText r
+
   logWrite v = liftIO $ encodeText v androidLogWrite
   {-# INLINE logWrite #-}
+
+  readSystemCertificates = getSystemCertificateStore additionalCertificates
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles dir = do

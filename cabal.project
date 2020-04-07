@@ -21,4 +21,4 @@ packages:
   ./interfaces/ergo
   ./ergo-api
   ./haskoin-network
-shared: true
+  ./x509-android

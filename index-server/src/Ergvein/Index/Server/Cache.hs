@@ -4,6 +4,7 @@ module Ergvein.Index.Server.Cache where
 import Conduit
 import Control.Monad
 import Control.Monad.Logger
+import Control.Monad.Catch
 import Conversion
 import Data.Default
 import Data.Flat
@@ -63,55 +64,62 @@ cacheTxOutInfos db infos = do
       let parsedMaybe = unflatExact <$> maybeStored
       pure $ (pubScriptHash,) <$> parsedMaybe
 
-addToCache :: MonadIO m => DB -> BlockInfo -> m ()
-addToCache db update = do
+addToCache :: (MonadLDB m) => BlockInfo -> m ()
+addToCache update = do
+  db <- getDb
   cacheTxOutInfos db $ blockContentTxOutInfos $ blockInfoContent update
   cacheTxInInfos db $ blockContentTxInInfos $ blockInfoContent update
   cacheTxInfos db $ blockContentTxInfos $ blockInfoContent update
   cacheBlockMetaInfos db $ [blockInfoMeta update]
 
-openCacheDb :: FilePath -> IO DB
-openCacheDb cacheDirectory = do
-  canonicalPathDirectory <- canonicalizePath cacheDirectory
-  isDbDirExist <- doesDirectoryExist canonicalPathDirectory
-  if isDbDirExist then clearDirectoryContent canonicalPathDirectory
-                  else createDirectory canonicalPathDirectory
-
-  open canonicalPathDirectory def {createIfMissing = True }
+openCacheDb :: (MonadLogger m, MonadIO m) => FilePath -> DBPool -> m DB
+openCacheDb cacheDirectory pool = do
+  canonicalPathDirectory <- liftIO $ canonicalizePath cacheDirectory
+  isDbDirExist <- liftIO $ doesDirectoryExist canonicalPathDirectory
+  liftIO $ if isDbDirExist then pure ()
+                           else createDirectory canonicalPathDirectory                  
+  levelDBContext <- liftIO $ open canonicalPathDirectory def `catch` restoreCache pool canonicalPathDirectory
+  pure levelDBContext
   where
     clearDirectoryContent path = do
       content <- listDirectory path
       let contentFullPaths = (path </>) <$> content
       forM_ contentFullPaths removePathForcibly
-    
+
+    restoreCache :: DBPool -> FilePath -> SomeException -> IO DB
+    restoreCache p pt _ = do
+       clearDirectoryContent pt
+       ctx <- open pt def {createIfMissing = True }
+       runStdoutLoggingT $ loadCache ctx p
+       pure ctx
 
 loadCache :: (MonadLogger m, MonadIO m) => DB -> DBPool -> m ()
 loadCache db pool = do
   logInfoN "Loading cache"
 
-  txOutChunksCount <- runDbQuery pool (chunksCount (Proxy :: Proxy TxOutRec))
-  runDbQuery pool $ runConduit 
+  txOutChunksCount <- dbQueryManual pool (chunksCount (Proxy :: Proxy TxOutRec))
+  dbQueryManual pool $ runConduit 
      $ DCI.zipSources (chunksEnumeration txOutChunksCount) (pagedEntitiesStream TxOutRecId)
     .| CL.mapM  (logLoadingProgress "outputs" txOutChunksCount)
     .| CL.mapM_ (cacheTxOutInfos db . fmap convert)
     .| sinkList
 
-  txInChunksCount <- runDbQuery pool (chunksCount (Proxy :: Proxy TxInRec))
-  runDbQuery pool $ runConduit
+  txInChunksCount <- dbQueryManual pool (chunksCount (Proxy :: Proxy TxInRec))
+  dbQueryManual pool $ runConduit
      $ DCI.zipSources (chunksEnumeration txInChunksCount) (pagedEntitiesStream TxInRecId)
     .| CL.mapM  (logLoadingProgress "inputs" txInChunksCount)
     .| CL.mapM_ (cacheTxInInfos db . fmap convert)
     .| sinkList
 
-  txChunksCount <- runDbQuery pool (chunksCount (Proxy :: Proxy TxRec))
-  runDbQuery pool $ runConduit
+  txChunksCount <- dbQueryManual pool (chunksCount (Proxy :: Proxy TxRec))
+  dbQueryManual pool $ runConduit
      $ DCI.zipSources (chunksEnumeration txChunksCount) (pagedEntitiesStream TxRecId)
     .| CL.mapM  (logLoadingProgress "transactions" txChunksCount)
     .| CL.mapM_ (cacheTxInfos db . fmap convert)
     .| sinkList
 
-  blockMetaChunksCount <- runDbQuery pool (chunksCount (Proxy :: Proxy BlockMetaRec))
-  runDbQuery pool $ runConduit
+  blockMetaChunksCount <- dbQueryManual pool (chunksCount (Proxy :: Proxy BlockMetaRec))
+  dbQueryManual pool $ runConduit
      $ DCI.zipSources (chunksEnumeration blockMetaChunksCount) (pagedEntitiesStream BlockMetaRecId)
     .| CL.mapM  (logLoadingProgress "block meta" blockMetaChunksCount)
     .| CL.mapM_ (cacheBlockMetaInfos db . fmap convert)

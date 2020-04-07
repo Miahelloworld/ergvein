@@ -16,8 +16,13 @@ import Ergvein.Index.Server.DB.Monad
 import Ergvein.Index.Server.DB.Queries
 import Ergvein.Index.Server.DB.Schema
 import Ergvein.Index.Server.Monad
+import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Transaction
+import Ergvein.Index.Server.BlockchainScanning.Common
+
+import qualified Network.Haskoin.Block as Btc 
+import qualified Data.Serialize as S 
 
 indexServer :: IndexApi AsServerM
 indexServer = IndexApi
@@ -30,6 +35,7 @@ indexServer = IndexApi
     , indexGetTxHexView = txHexViewEndpoint
     , indexGetTxFeeHistogram = txFeeHistogramEndpoint
     , indexTxBroadcast = txBroadcastRequestEndpoint
+    , indexGetInfo = indexGetInfoEndpoint
     }
 -- Stubs
 
@@ -55,7 +61,7 @@ ergoBroadcastResponse = "4c6282be413c6e300a530618b37790be5f286ded758accc2aebd415
 --Endpoints
 indexGetHeightEndpoint :: HeightRequest -> ServerM HeightResponse
 indexGetHeightEndpoint (HeightRequest currency) = do
-  mh <- runDb $ fmap (scannedHeightRecHeight . entityVal) <$> getScannedHeight currency
+  mh <- dbQuery $ fmap (scannedHeightRecHeight . entityVal) <$> getScannedHeight currency
   pure $ HeightResponse $ fromMaybe 0 mh
 
 indexGetBalanceEndpoint :: BalanceRequest -> ServerM BalanceResponse
@@ -88,7 +94,7 @@ indexGetTxHashHistoryEndpoint request = do
 getBlockMetaSlice :: Currency -> BlockHeight -> BlockHeight -> ServerM [BlockMetaCacheRec]
 getBlockMetaSlice currency startHeight endHeight = do
   let start = cachedMetaKey (currency, startHeight) 
-      end   = BlockMetaCacheRecKey currency $ startHeight + endHeight
+      end   = BlockMetaCacheRecKey currency $ startHeight + pred endHeight
   slice <- safeEntrySlice start end
   let metaSlice = snd <$> slice
   pure metaSlice
@@ -102,8 +108,20 @@ indexGetBlockHeadersEndpoint request = do
 indexGetBlockFiltersEndpoint :: BlockFiltersRequest -> ServerM BlockFiltersResponse
 indexGetBlockFiltersEndpoint request = do
     slice <- getBlockMetaSlice (filtersReqCurrency request) (filtersReqStartHeight request) (filtersReqAmount request)
-    let blockFilters = blockMetaCacheRecAddressFilterHexView <$> slice
+    let blockFilters = (\s -> (mkHash $ blockMetaCacheRecHeaderHexView s, blockMetaCacheRecAddressFilterHexView s)) <$> slice
     pure blockFilters
+    where 
+      mkHash = case filtersReqCurrency request of 
+        BTC -> Btc.blockHashToHex . Btc.headerHash . either (error . ("Failed to decode block hash! " ++)) id . S.decode . hex2bs
+        _ -> error "Ergo indexGetBlockFiltersEndpoint is not implemented!" -- TODO here
+
+indexGetInfoEndpoint :: ServerM InfoResponse
+indexGetInfoEndpoint = do 
+  scanInfo <- scanningInfo
+  let mappedScanInfo = scanNfoItem <$> scanInfo
+  pure $ InfoResponse mappedScanInfo
+  where
+    scanNfoItem nfo = ScanProgressItem (nfoCurrency nfo) (nfoScannedHeight nfo) (nfoActualHeight nfo)
 
 txMerkleProofEndpoint :: TxMerkleProofRequest -> ServerM TxMerkleProofResponse
 txMerkleProofEndpoint TxMerkleProofRequest { merkleReqCurrency = BTC }  = pure btcProof
