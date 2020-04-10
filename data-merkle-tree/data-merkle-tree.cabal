@@ -66,7 +66,7 @@ test-suite merkle-tree-test
     TupleSections
   build-depends:
       base
-    , QuickCheck            >= 2.12  && < 2.13
+    , QuickCheck            >= 2.13  && < 2.14
     , bytestring
     , quickcheck-instances  >= 0.3   && < 0.4
     , tasty                 >= 1.2   && < 1.3

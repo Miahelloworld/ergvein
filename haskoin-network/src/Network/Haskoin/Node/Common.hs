@@ -2,14 +2,11 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving         #-}
 {-|
 Module      : Network.Haskoin.Node.Common
 Copyright   : No rights reserved
 License     : UNLICENSE
-Maintainer  : xenog@protonmail.com
+Maintainer  : jprupp@protonmail.ch
 Stability   : experimental
 Portability : POSIX
 
@@ -17,30 +14,42 @@ Common functions used by Haskoin Node.
 -}
 module Network.Haskoin.Node.Common where
 
-import           Conduit
-import           Control.Monad
-import           Control.Monad.Trans.Maybe
-import           Data.Conduit.Network
-import           Data.Function
-import           Data.List
-import           Data.Maybe
-import           Data.String.Conversions
-import           Data.Time.Clock
-import           Data.Word
-import           Network.Haskoin.Block
-import           Network.Haskoin.Constants
-import           Network.Haskoin.Network
-import           Network.Haskoin.Transaction
-import           Network.Socket           hiding (send, HostAddress(..))
-import           NQE
-import           System.Random
-import           Text.Read
-import           UnliftIO
-import           Data.Serialize              as S
-import           Control.DeepSeq
-import           Data.ByteString             (ByteString)
-import           GHC.Generics                (Generic)
-import           Control.DeepSeq
+import           Control.Monad               (join)
+import           Control.Monad.Trans.Maybe   (MaybeT (..), runMaybeT)
+import           Data.Conduit.Network        (AppData, clientSettings,
+                                              runGeneralTCPClient)
+import           Data.Function               (on)
+import           Data.List                   (union)
+import           Data.Maybe                  (fromMaybe, isJust)
+import           Data.String.Conversions     (cs)
+import           Data.Time.Clock             (NominalDiffTime, UTCTime)
+import           Data.Word                   (Word32, Word64)
+import           Network.Haskoin.Block       (Block (..), BlockHash,
+                                              BlockHeader (..), BlockHeight,
+                                              BlockNode (..), getBlockHash,
+                                              headerHash)
+import           Network.Haskoin.Constants   (Network (..))
+import           Network.Haskoin.Network     (GetData (..), InvType (..),
+                                              InvVector (..), Message (..),
+                                              NetworkAddress (..),
+                                              NotFound (..), Ping (..),
+                                              Pong (..), VarString (..),
+                                              Version (..))
+import           Network.Haskoin.Transaction (Tx, TxHash, getTxHash, txHash)
+import           Network.Socket              (AddrInfo (..), AddrInfoFlag (..),
+                                              Family (..), NameInfoFlag (..),
+                                              SockAddr, SocketType (..),
+                                              defaultHints, getAddrInfo,
+                                              getNameInfo)
+import           NQE                         (Child, Listen, Mailbox, Publisher,
+                                              query, queryS, receive,
+                                              receiveMatchS, send,
+                                              withSubscription)
+import           System.Random               (randomIO)
+import           Text.Read                   (readMaybe)
+import           UnliftIO                    (Async (..), Exception, MonadIO,
+                                              MonadUnliftIO, SomeException,
+                                              catch, liftIO, throwIO, timeout)
 
 -- | Type alias for a combination of hostname and port.
 type HostPort = (Host, Port)
@@ -53,24 +62,26 @@ type Port = Int
 
 -- | Data structure representing an online peer.
 data OnlinePeer = OnlinePeer
-    { onlinePeerAddress   :: !SockAddr
+    { onlinePeerAddress     :: !SockAddr
       -- ^ network address
-    , onlinePeerVerAck    :: !Bool
+    , onlinePeerVerAck      :: !Bool
       -- ^ got version acknowledgement from peer
-    , onlinePeerConnected :: !Bool
+    , onlinePeerConnected   :: !Bool
       -- ^ peer is connected and ready
-    , onlinePeerVersion   :: !(Maybe Version)
+    , onlinePeerVersion     :: !(Maybe Version)
       -- ^ protocol version
-    , onlinePeerAsync     :: !(Async ())
+    , onlinePeerAsync       :: !(Async ())
       -- ^ peer asynchronous process
-    , onlinePeerMailbox   :: !Peer
+    , onlinePeerMailbox     :: !Peer
       -- ^ peer mailbox
-    , onlinePeerNonce     :: !Word64
+    , onlinePeerNonce       :: !Word64
       -- ^ random nonce sent during handshake
-    , onlinePeerPing      :: !(Maybe (UTCTime, Word64))
+    , onlinePeerPing        :: !(Maybe (UTCTime, Word64))
       -- ^ last sent ping time and nonce
-    , onlinePeerPings     :: ![NominalDiffTime]
+    , onlinePeerPings       :: ![NominalDiffTime]
       -- ^ last few ping rountrip duration
+    , onlinePeerConnectTime :: !Word64
+      -- ^ when connection was opened
     }
 
 instance Eq OnlinePeer where
@@ -235,6 +246,8 @@ data PeerException
       -- ^ request to peer timed out
     | UnknownPeer
       -- ^ peer is unknown
+    | PeerTooOld
+      -- ^ peer has been connected too long
     deriving (Eq, Show)
 
 instance Exception PeerException
@@ -258,7 +271,7 @@ data PeerMessage
     | KillPeer !PeerException
     | SendMessage !Message
 
--- | Resolve a host and port to a list of 'SockAddr'. May make use DNS resolver.
+-- | Resolve a host and port to a list of 'SockAddr'. May do DNS lookups.
 toSockAddr :: MonadUnliftIO m => HostPort -> m [SockAddr]
 toSockAddr (host, port) = go `catch` e
   where
@@ -521,49 +534,3 @@ median ls
     | length ls `mod` 2 == 0 =
         Just . (/ 2) . sum . take 2 $ drop (length ls `div` 2 - 1) ls
     | otherwise = Just . head $ drop (length ls `div` 2) ls
-
-newtype HostAddress =
-    HostAddress ByteString
-    deriving (Eq, Show, Ord, Generic, NFData)
-
-instance Serialize HostAddress where
-    put (HostAddress bs) = putByteString bs
-    get = HostAddress <$> getByteString 18
-
-hostToSockAddr :: HostAddress -> SockAddr
-hostToSockAddr (HostAddress bs) =
-    case runGet getSockAddr bs of
-        Left e  -> error e
-        Right x -> x
-
-getSockAddr :: Get SockAddr
-getSockAddr = do
-    a <- getWord32be
-    b <- getWord32be
-    c <- getWord32be
-    if a == 0x00000000 && b == 0x00000000 && c == 0x0000ffff
-        then do
-            d <- getWord32host
-            p <- getWord16be
-            return $ SockAddrInet (fromIntegral p) d
-        else do
-            d <- getWord32be
-            p <- getWord16be
-            return $ SockAddrInet6 (fromIntegral p) 0 (a, b, c, d) 0
-
-putSockAddr :: SockAddr -> Put
-putSockAddr (SockAddrInet6 p _ (a, b, c, d) _) = do
-    putWord32be a
-    putWord32be b
-    putWord32be c
-    putWord32be d
-    putWord16be (fromIntegral p)
-
-putSockAddr (SockAddrInet p a) = do
-    putWord32be 0x00000000
-    putWord32be 0x00000000
-    putWord32be 0x0000ffff
-    putWord32host a
-    putWord16be (fromIntegral p)
-
-putSockAddr _ = error "Invalid address type"

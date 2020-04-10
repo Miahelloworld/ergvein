@@ -96,5 +96,7 @@ test-suite spec
     , transformers
     , unliftio
     , unordered-containers
+    , hspec
+    , hspec-discover
   default-language: Haskell2010
-  build-tool-depends: hspec-discover:hspec-discover
+  build-tool-depends: 
