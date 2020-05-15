@@ -1,69 +1,6 @@
-<div class="container bg-white">
-    <div class="row py-4 py-lg-5">
-        <div class="col-lg-3">
-            <nav class="navbar navbar-expand-lg navbar-light side-nav sticky-top mt-2" aria-label="Docs navigation">
-                <a class="collapsed btn-block d-lg-none btn btn-outline-white p-3 mb-4 text-center" href="#collapseOne" data-toggle="collapse" data-target="#navbarDocs" aria-expanded="false" aria-controls="navbarDocs" aria-label="Docs navigation">Navigation</a>
-
-                <div class="collapse navbar-collapse" id="navbarDocs">
-
-                    <dl class="navbar-nav flex-column">
-                        <dt class="text-uppercase mb-2">Getting Started</dt>
-                        <dd>
-                            <a href="index.html" class=active>Introduction</a>
-                        </dd>
-                        <dd>
-                            <a href="template.html" >Basic template</a>
-                        </dd>
-                        <dd>
-                            <a href="changelog.html" >Changelog</a>
-                        </dd>
-
-                        <dt class="text-uppercase mt-3 mb-2">Components</dt>
-                        <dd>
-                            <a href="avatars.html" >Avatars</a>
-                        </dd>
-                        <dd>
-                            <a href="buttons.html" >Buttons</a>
-                        </dd>
-                        <dd>
-                            <a href="carousel.html" >Carousel</a>
-                        </dd>
-                        <dd>
-                            <a href="forms.html" >Forms</a>
-                        </dd>
-                        <dd>
-                            <a href="icons.html" >Icons</a>
-                        </dd>
-                        <dd>
-                            <a href="images.html" >Images</a>
-                        </dd>
-                        <dd>
-                            <a href="navbar.html" >Navbar</a>
-                        </dd>
-                        <dd>
-                            <a href="pagination.html" >Pagination</a>
-                        </dd>
-
-                        <dt class="text-uppercase mt-3 mb-2">Utilities</dt>
-                        <dd>
-                            <a href="borders.html" >Borders</a>
-                        </dd>
-                        <dd>
-                            <a href="text.html" >Text</a>
-                        </dd>
-
-                        <dt class="text-uppercase mt-3 mb-2">Plugins</dt>
-                        <dd>
-                            <a href="zoom.html" >Zoom</a>
-                        </dd>
-                    </dl>
-                </div>
-            </nav>
-        </div>
-        <div class="col-lg-9">
-            <main id="main">
-              <div class="bg-white text-dark">
-
+---
+name: Introduction
+---
 <h1>Introduction</h1>
 <p class="lead">A brief guide to get started with Focus theme.</p>
 
@@ -121,9 +58,3 @@
     <pre class="mb-4"><code class="language-bash py-2">gulp uncss</code></pre>
 </figure>
 <p>Purgecss analyzes the HTML and Bootstrap JS files and removes unused CSS. The CSS file size will be reduced and your website performance will improve.</p>
-
-            </div>
-          </main>
-        </div>
-    </div>
-</div>
