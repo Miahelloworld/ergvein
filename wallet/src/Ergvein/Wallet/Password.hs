@@ -52,13 +52,38 @@ askPassword = divClass "ask-password" $ form $ fieldset $ do
 
 askPasswordModal :: MonadFrontBase t m => m ()
 askPasswordModal = mdo
-  goE  <- fmap fst getPasswordModalEF
-  fire <- fmap snd getPasswordSetEF
-  let redrawE = leftmost [Just <$> goE, Nothing <$ passE]
-  passE <- fmap (switch . current) $ widgetHold (pure never) $ ffor redrawE $ \case
-    Just i -> divClass "ask-password-modal" $ (fmap . fmap) ((i,) . Just) askPassword
-    Nothing -> pure never
-  performEvent_ $ (liftIO . fire) <$> passE
+divClass "ask-pattern" $ form $ fieldset $ mdo
+  c <- loadCounter
+  let cInt = case (Map.lookup name (patterntriesCount c)) of
+        Just p -> p
+        Nothing -> 0
+  now <- liftIO $ getCurrentTime
+  a <- (clockLossy 1 now)
+  freezD <- widgetHold (pure False) $ ffor (updated a) $ \TickInfo{..} -> do
+    cS <- sampleDyn counterD
+    let cdTime = if cS < 5
+          then 0
+          else 30 * (2 ^ (cS-5))
+    if (cdTime - _tickInfo_n) > 0
+    then do
+      divClass "backcounter" $ text $ "You should wait " <>  (showt $ cdTime - _tickInfo_n) <> " sec"
+      pure False
+    else do
+      pure (True)
+  pD <- patternAskWidget
+  counterD <- holdDyn cInt $ poke (updated pD) $ \_ -> do
+    freezS <- sampleDyn freezD
+    cS <- sampleDyn counterD
+    if freezS
+      then do
+        pure (cS + 1)
+      else pure cS
+  performEvent_ $ ffor (updated counterD) $ \cS -> do
+    liftIO $ saveCounter $ PatternTries $ Map.insert name cS (patterntriesCount c)
+    pure ()
+  pDE <- delay 0.2 (updated pD)
+  let e = gate (current freezD) pDE
+  pure $ ()
 
 #ifdef ANDROID
 
