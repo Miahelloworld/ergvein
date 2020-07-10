@@ -97,6 +97,7 @@ benchmark bench-btc-filters
    , bytestring
    , cereal
    , criterion
+   , deepseq
    , ergvein-common
    , haskoin-core
    , random
