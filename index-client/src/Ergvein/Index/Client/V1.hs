@@ -8,6 +8,10 @@ module Ergvein.Index.Client.V1
   , getIntroducePeerEndpoint
   , getKnownPeersEndpoint
   , getFeeEstimatesEndpoint
+  , module Ergvein.Index.API
+  , module Ergvein.Index.API.Types
+  , module Ergvein.Index.API.V1
+  , module Ergvein.Types.Currency
   ) where
 
 import Control.Monad.IO.Class
@@ -38,6 +42,10 @@ apiV1 = fromServant $ indexVersionedApi'v1 api
 
 class MonadIO m => HasClientManager m where
   getClientManager  :: m Manager
+
+instance MonadIO m => HasClientManager (ReaderT Manager m) where
+  getClientManager = ask
+  {-# INLINE getClientManager #-}
 
 getHeightEndpoint :: (HasClientManager m, PlatformNatives) => BaseUrl -> HeightRequest -> m (Either ClientError HeightResponse)
 getHeightEndpoint url req = do
