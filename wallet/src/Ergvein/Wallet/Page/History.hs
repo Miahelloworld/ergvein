@@ -321,7 +321,7 @@ prepareTransactionView hght tz TxRawInfo{..} = TransactionView {
   where
     txInf = TransactionViewInfo {
       txId            = txHex
-     ,txLabel         = Nothing
+     ,txLabel         = Just $ "blHeight:" <> (showt blHght) <> " height:" <> (showt hght)
      ,txUrl           = if isTestnet
        then "https://www.blockchain.com/btc-testnet/tx/" <> txHex
        else "https://www.blockchain.com/btc/tx/" <> txHex
@@ -347,7 +347,7 @@ prepareTransactionView hght tz TxRawInfo{..} = TransactionView {
     secToTimestamp t = formatTime defaultTimeLocale "%Y/%m/%d %H:%M:%S" $ utcToZonedTime tz $ posixSecondsToUTCTime $ fromIntegral t
 
 -- Front types, should be moved to Utils
-data ExpStatus = Expanded | Minified deriving (Eq, Show)
+data ExpStatus = Expanded | Minified deriving (Eq, Show) 
 
 -- Mock Transaction info types for visualisation.
 data TransStatus = TransConfirmed | TransUncofirmed deriving (Eq,Show)
