@@ -1,5 +1,5 @@
 name:                golomb-rice
-version:             0.2.0.0
+version:             0.3.0.0
 synopsis:            Golomb-rice encoding for bytestrings and bit streams.
 description:         See README.md
 category:            Data
@@ -33,6 +33,11 @@ library
     , safe            >= 0.3 && < 0.4
     , vector          >= 0.12
   if flag(cbitstream)
+    c-sources: cbits/golombrice.c
+    include-dirs: include
+    install-includes: golombrice.h
+    build-tool-depends: hsc2hs:hsc2hs
+    hs-source-dirs: src
     exposed-modules:
       Data.Encoding.GolombRice.Strict.Mutable
       Data.Encoding.GolombRice.Strict.Mutable.Internal
