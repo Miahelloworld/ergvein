@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Data.Encoding.GolombRice.Strict.C.Internal where
 
 import Control.Monad.IO.Class
@@ -7,7 +8,7 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Utils
 import Foreign.Ptr
 import GHC.Generics
-import Prelude hiding (length)
+import Prelude hiding (length, null)
 import Data.ByteString (ByteString)
 
 import qualified Data.ByteString as BS
@@ -38,6 +39,29 @@ empty p n = liftIO $ do
   wfp <- newForeignPtr C.golombrice_writer_delete_ptr wp
   withForeignPtr buff $ \bp -> C.golombrice_writer_init wp bp p
   pure $ GolombRiceWriter n buff wfp
+
+-- | Reallocate internal buffer to the given size. If the size is smaller than
+-- amount of bytes clamps to that
+resize :: MonadIO m => Int -> GolombRiceWriter -> m GolombRiceWriter
+resize n gs = liftIO $ withForeignPtr (golombRiceWriter gs) $ \wp -> do
+  l <- fmap fromIntegral $ C.golombrice_writer_length wp
+  let n' = if n < l then l else n
+  newBuff <- mallocForeignPtrBytes n'
+  withForeignPtr newBuff $ \newp -> withForeignPtr (golombRiceWriterBuffer gs) $ \oldp -> do
+    copyBytes newp oldp l
+    withForeignPtr (golombRiceWriter gs) $ \wp -> C.golombrice_writer_update_buffer wp newp
+  pure $ GolombRiceWriter n' newBuff (golombRiceWriter gs)
+{-# INLINABLE resize #-}
+
+-- | Reallocate if needed to handle given amount of additiona bytes.
+realloc :: MonadIO m => Int -> GolombRiceWriter -> m GolombRiceWriter
+realloc n gs = liftIO $ withForeignPtr (golombRiceWriter gs) $ \wp -> do
+  l <- fmap fromIntegral $ C.golombrice_writer_length wp
+  if (golombRiceWriterSize gs <= l + n)
+    then resize (if l + n < 2*l then 2*l else l + n) gs
+    else pure gs
+{-# INLINEABLE realloc #-}
+
 
 -- | Start reading golomb rice encoded bytestring. Copies contents of the
 -- bytestring. O(n)
@@ -112,3 +136,25 @@ decodeWords GolombRiceReader{..} n = liftIO $ withForeignPtr golombRiceReader $ 
   buff <- mallocForeignPtrBytes (n * 8)
   withForeignPtr buff $ \bptr -> C.golombrice_reader_decode_words p bptr n
   pure $ VS.unsafeFromForeignPtr0 buff n
+
+-- | Helper that tells fold either to continue or stop scanning
+data Shortcut a = Next !a | Stop !a
+  deriving (Show, Eq, Generic)
+
+-- | Fold over stream of words
+foldl
+  :: MonadIO m
+  => (a -> Word64 -> IO (Shortcut a)) -- ^ Folding function with stop condition
+  -> a -- ^ Start accumulator
+  -> GolombRiceReader
+  -> m a -- ^ End accumulator
+foldl f a0 !s = liftIO $ withForeignPtr (golombRiceReaderBuffer s) $ const $ go a0 -- Fixes https://github.com/hexresearch/ergvein/issues/558
+  where
+    go !a = do
+      empty <- null s
+      if empty then pure a else do
+        w <- decodeWord s
+        sh <- f a w
+        case sh of
+          Next a' -> go a'
+          Stop a' -> pure a'

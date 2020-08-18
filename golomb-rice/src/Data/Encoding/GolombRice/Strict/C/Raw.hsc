@@ -29,6 +29,9 @@ foreign import ccall unsafe "golombrice_writer_length"
 foreign import ccall unsafe "golombrice_writer_data"
   golombrice_writer_data :: Ptr GolombRiceWriter -> IO (Ptr CUChar)
 
+foreign import ccall unsafe "golombrice_writer_update_buffer"
+  golombrice_writer_update_buffer :: Ptr GolombRiceWriter -> Ptr CUChar -> IO ()
+
 foreign import ccall unsafe "golombrice_writer_encode_word"
   golombrice_writer_encode_word :: Ptr GolombRiceWriter -> Word64 -> IO ()
 

@@ -76,6 +76,9 @@ void golombrice_writer_init(struct golombrice_writer_t *self_p,
 /// Return amount of bytes written into the stream.
 int golombrice_writer_length(struct golombrice_writer_t *self_p);
 
+/// Replace buffer of the stream without changing it state
+void golombrice_writer_update_buffer(struct golombrice_writer_t *self_p, uint8_t *buf_p);
+
 /// Return encoded data into the stream.
 uint8_t* golombrice_writer_data(struct golombrice_writer_t *self_p);
 
