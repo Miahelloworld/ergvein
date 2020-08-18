@@ -39,6 +39,7 @@ library
     build-tool-depends: hsc2hs:hsc2hs
     hs-source-dirs: src
     exposed-modules:
+      Data.Encoding.GolombRice.Strict.C.Raw
       Data.Encoding.GolombRice.Strict.Mutable
       Data.Encoding.GolombRice.Strict.Mutable.Internal
     build-depends: cbitstream >= 0.1 && < 0.2
