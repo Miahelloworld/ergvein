@@ -1,5 +1,5 @@
 name:                cbitstream
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Library to work with stream of bits. Bindings to C library https://github.com/eerimoq/bitstream
 description:         See README.md
 category:            Data
@@ -10,12 +10,15 @@ license-file:        LICENSE
 copyright:           2020 ATUM SOLUTIONS AG
 author:              Anton Gushcha, Aminion, Vladimir Krutkin, Levon Oganyan, Sergey Ivanov
 maintainer:          Anton Gushcha <ncrashed@protonmail.com>
+extra-source-files:
+  CHANGELOG.md
+  README.md
 
 library
   other-extensions: ForeignFunctionInterface
-  c-sources:
-    cbits/bitstream.c
-    cbits/bitstream.h
+  c-sources: cbits/bitstream.c
+  include-dirs: include
+  install-includes: bitstream.h
   build-tool-depends: hsc2hs:hsc2hs
   hs-source-dirs: src
   exposed-modules:
