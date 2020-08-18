@@ -39,6 +39,8 @@ library
     build-tool-depends: hsc2hs:hsc2hs
     hs-source-dirs: src
     exposed-modules:
+      Data.Encoding.GolombRice.Strict.C
+      Data.Encoding.GolombRice.Strict.C.Internal
       Data.Encoding.GolombRice.Strict.C.Raw
       Data.Encoding.GolombRice.Strict.Mutable
       Data.Encoding.GolombRice.Strict.Mutable.Internal
@@ -49,6 +51,7 @@ library
     DeriveGeneric
     FlexibleContexts
     OverloadedStrings
+    RecordWildCards
     TemplateHaskell
 
 test-suite golomb-rice-test
