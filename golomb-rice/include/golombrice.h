@@ -31,4 +31,98 @@
 
 #define GOLOMBRICE_VERSION "0.1.0"
 
+/// Write only stream of golomb rice encoded bits
+struct golombrice_writer_t {
+    /// Written bits
+    struct bitstream_writer_t stream;
+    /// Number of bits P in remainder part of encoding
+    int p;
+};
+
+/// Read only stream of golomb rice encoded bits
+struct golombrice_reader_t {
+    /// Reading bits
+    struct bitstream_reader_t stream;
+    /// Number of bits P in remainder part of encoding
+    int p;
+};
+
+/*
+ * The writer.
+ */
+
+/** Allocate new writer structure.
+*
+* It allocates only control structure and need to be initialized
+* with golombrice_writer_init.
+*
+* Destroy it with golombrice_writer_delete.
+*/
+struct golombrice_writer_t* golombrice_writer_new();
+
+/** Deallocates memory for control structure of golomb rice stream.
+*
+* Note that it doesn't destroy underlying buffer for data.
+*/
+void golombrice_writer_delete(struct golombrice_writer_t *self_p);
+
+/** Initialize the writer with given buffer and encoding parameter.
+*
+*  The p parameter defines number of bits in remainder part of encoding.
+*/
+void golombrice_writer_init(struct golombrice_writer_t *self_p,
+                            uint8_t *buf_p, int p);
+
+/// Return amount of bytes written into the stream.
+int golombrice_writer_length(struct golombrice_writer_t *self_p);
+
+/// Return encoded data into the stream.
+uint8_t* golombrice_writer_data(struct golombrice_writer_t *self_p);
+
+/// Encodes single word into the stream.
+void golombrice_writer_encode_word(struct golombrice_writer_t *self_p,
+                                   uint64_t v);
+
+/// Encodes array of words into the stream.
+void golombrice_writer_encode_words(struct golombrice_writer_t *self_p,
+                                   uint64_t *words, int n);
+
+/*
+ * The reader.
+ */
+
+/** Allocate new writer structure.
+*
+* It allocates only control structure and need to be initialized
+* with golombrice_writer_init.
+*
+* Destroy it with golombrice_writer_delete.
+*/
+struct golombrice_reader_t* golombrice_reader_new();
+
+/** Deallocates memory for control structure of golomb rice stream.
+*
+* Note that it doesn't destroy underlying buffer for data.
+*/
+void golombrice_reader_delete(struct golombrice_reader_t *self_p);
+
+/** Initialize the reader with given buffer and encoding parameter.
+*
+*  The p parameter defines number of bits in remainder part of encoding.
+*/
+void golombrice_reader_init(struct golombrice_reader_t *self_p,
+                           uint8_t *buf_p, int p);
+
+/// Returns length in bytes that remains in the stream.
+int golombrice_reader_length(struct golombrice_reader_t *self_p);
+
+/// Decodes next word from the stream. Undefined behavior on empty stream.
+uint64_t golombrice_reader_decode_word(struct golombrice_reader_t *self_p);
+
+/// Decodes given amount of words into buffer. Undefined behavior if
+/// there is no enough bytes inside the stream.
+void golombrice_reader_decode_words(struct golombrice_reader_t *self_p,
+                                    uint64_t *words, int n);
+
+
 #endif
