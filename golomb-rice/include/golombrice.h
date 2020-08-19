@@ -37,6 +37,8 @@ struct golombrice_writer_t {
     struct bitstream_writer_t stream;
     /// Number of bits P in remainder part of encoding
     int p;
+    /// Current buffer size
+    int size;
 };
 
 /// Read only stream of golomb rice encoded bits
