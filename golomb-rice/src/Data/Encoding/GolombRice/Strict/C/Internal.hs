@@ -16,10 +16,8 @@ import qualified Data.ByteString.Unsafe as BS
 import qualified Data.Encoding.GolombRice.Strict.C.Raw as C
 import qualified Data.Vector.Storable as VS
 
-data GolombRiceWriter = GolombRiceWriter {
-    golombRiceWriterSize   :: !Int
-  , golombRiceWriterBuffer :: !(ForeignPtr CUChar)
-  , golombRiceWriter       :: !(ForeignPtr C.GolombRiceWriter)
+newtype GolombRiceWriter = GolombRiceWriter {
+    golombRiceWriter       :: (ForeignPtr C.GolombRiceWriter)
   } deriving (Generic)
 
 data GolombRiceReader = GolombRiceReader {
@@ -34,34 +32,9 @@ empty :: MonadIO m
   -> Int -- ^ Preallocated amount of bytes
   -> m GolombRiceWriter
 empty p n = liftIO $ do
-  buff <- mallocForeignPtrBytes n
-  wp <- C.golombrice_writer_new
+  wp <- C.golombrice_writer_new n p
   wfp <- newForeignPtr C.golombrice_writer_delete_ptr wp
-  withForeignPtr buff $ \bp -> C.golombrice_writer_init wp bp p
-  pure $ GolombRiceWriter n buff wfp
-
--- | Reallocate internal buffer to the given size. If the size is smaller than
--- amount of bytes clamps to that
-resize :: MonadIO m => Int -> GolombRiceWriter -> m GolombRiceWriter
-resize n gs = liftIO $ withForeignPtr (golombRiceWriter gs) $ \wp -> do
-  l <- fmap fromIntegral $ C.golombrice_writer_length wp
-  let n' = if n < l then l else n
-  newBuff <- mallocForeignPtrBytes n'
-  withForeignPtr newBuff $ \newp -> withForeignPtr (golombRiceWriterBuffer gs) $ \oldp -> do
-    copyBytes newp oldp l
-    withForeignPtr (golombRiceWriter gs) $ \wp -> C.golombrice_writer_update_buffer wp newp
-  pure $ GolombRiceWriter n' newBuff (golombRiceWriter gs)
-{-# INLINABLE resize #-}
-
--- | Reallocate if needed to handle given amount of additiona bytes.
-realloc :: MonadIO m => Int -> GolombRiceWriter -> m GolombRiceWriter
-realloc n gs = liftIO $ withForeignPtr (golombRiceWriter gs) $ \wp -> do
-  l <- fmap fromIntegral $ C.golombrice_writer_length wp
-  if (golombRiceWriterSize gs <= l + n)
-    then resize (if l + n < 2*l then 2*l else l + n) gs
-    else pure gs
-{-# INLINEABLE realloc #-}
-
+  pure $ GolombRiceWriter wfp
 
 -- | Start reading golomb rice encoded bytestring. Copies contents of the
 -- bytestring. O(n)
@@ -71,19 +44,19 @@ fromByteString :: MonadIO m
   -> m GolombRiceReader
 fromByteString p bs = liftIO $ BS.unsafeUseAsCStringLen bs $ \(ptr, n) -> do
   buff <- mallocForeignPtrBytes n
-  wp <- C.golombrice_reader_new
-  wfp <- newForeignPtr C.golombrice_reader_delete_ptr wp
-  withForeignPtr buff $ \bp -> do
+  wp <- withForeignPtr buff $ \bp -> do
     copyBytes bp (castPtr ptr) n
-    C.golombrice_reader_init wp bp p
+    C.golombrice_reader_new bp p
+  wfp <- newForeignPtr C.golombrice_reader_delete_ptr wp
   pure $ GolombRiceReader n buff wfp
 
 -- | Copy encoded result from writer stream.
 toByteString :: MonadIO m
   => GolombRiceWriter
   -> m ByteString
-toByteString GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriterBuffer $ \buff -> do
-  n <- withForeignPtr golombRiceWriter C.golombrice_writer_length
+toByteString GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriter $ \w -> do
+  n <- C.golombrice_writer_length w
+  buff <- C.golombrice_writer_data w 
   BS.packCStringLen (castPtr buff, n)
 
 class GolombRice a where
