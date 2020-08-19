@@ -35,6 +35,7 @@ empty p n = liftIO $ do
   wp <- C.golombrice_writer_new n p
   wfp <- newForeignPtr C.golombrice_writer_delete_ptr wp
   pure $ GolombRiceWriter wfp
+{-# INLINABLE empty #-}
 
 -- | Start reading golomb rice encoded bytestring. Copies contents of the
 -- bytestring. O(n)
@@ -49,6 +50,7 @@ fromByteString p bs = liftIO $ BS.unsafeUseAsCStringLen bs $ \(ptr, n) -> do
     C.golombrice_reader_new bp p
   wfp <- newForeignPtr C.golombrice_reader_delete_ptr wp
   pure $ GolombRiceReader n buff wfp
+{-# INLINABLE fromByteString #-}
 
 -- | Copy encoded result from writer stream.
 toByteString :: MonadIO m
@@ -58,6 +60,18 @@ toByteString GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriter $ \
   n <- C.golombrice_writer_length w
   buff <- C.golombrice_writer_data w
   BS.packCStringLen (castPtr buff, n)
+{-# INLINABLE toByteString #-}
+
+-- | Helper that writes down all words into new stream
+encodeVector :: MonadIO m
+  => Int -- ^ Number of bits P in reminder of each element
+  -> VS.Vector Word64
+  -> m GolombRiceWriter
+encodeVector p vs = do
+  s <- empty p (VS.length vs * 8) -- assume that encoding will be smaller than original buffer 
+  encodeWords s vs
+  pure s
+{-# INLINABLE encodeVector #-}
 
 class GolombRice a where
   -- | Query if stream contains any data
@@ -83,6 +97,7 @@ encodeWord :: MonadIO m
   -> m ()
 encodeWord GolombRiceWriter{..} w = liftIO $ withForeignPtr golombRiceWriter $ \p ->
   C.golombrice_writer_encode_word p w
+{-# INLINE encodeWord #-}
 
 -- | Write down many words into golomb rice stream
 encodeWords :: MonadIO m
@@ -92,6 +107,7 @@ encodeWords :: MonadIO m
 encodeWords GolombRiceWriter{..} vs = liftIO $ withForeignPtr golombRiceWriter $ \p -> do
   let (vsf, n) = VS.unsafeToForeignPtr0 vs
   withForeignPtr vsf $ \vsp -> C.golombrice_writer_encode_words p vsp n
+{-# INLINABLE encodeWords #-}
 
 -- | Read next word from the golomb rice stream.
 decodeWord :: MonadIO m
@@ -99,6 +115,7 @@ decodeWord :: MonadIO m
   -> m Word64
 decodeWord GolombRiceReader{..} = liftIO $ withForeignPtr golombRiceReader $ \p ->
   C.golombrice_reader_decode_word p
+{-# INLINE decodeWord #-}
 
 -- | Read next N words from the golomb rice stream.
 decodeWords :: MonadIO m
@@ -109,6 +126,7 @@ decodeWords GolombRiceReader{..} n = liftIO $ withForeignPtr golombRiceReader $ 
   buff <- mallocForeignPtrBytes (n * 8)
   i <- withForeignPtr buff $ \bptr -> C.golombrice_reader_decode_words p bptr n
   pure $ VS.unsafeFromForeignPtr0 buff i
+{-# INLINABLE decodeWords #-}
 
 -- | Helper that tells fold either to continue or stop scanning
 data Shortcut a = Next !a | Stop !a
@@ -131,3 +149,4 @@ foldl f a0 !s = liftIO $ withForeignPtr (golombRiceReaderBuffer s) $ const $ go 
         case sh of
           Next a' -> go a'
           Stop a' -> pure a'
+{-# INLINABLE foldl #-}
