@@ -48,6 +48,9 @@ historyPage cur = do
 historyTableWidget :: MonadFront t m => Currency -> m (Event t TransactionView)
 historyTableWidget cur = divClass "history-table" $ case cur of
   BTC -> do
+    txE <- requestBTCMempool =<< delay 1 =<< getPostBuild
+    widgetHold (text "test") $ ffor txE $ \msg -> text $ showt msg
+    divClass "Test" $ text "Test"
     (txsD, hghtD) <- transactionsGetting BTC
     let txMapD = Map.fromList . L.zip [0..] <$> txsD
     mapED <- listWithKey txMapD (\_ -> historyTableRowD hghtD)

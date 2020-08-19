@@ -148,6 +148,11 @@ randomOne vals = case vals of
     i <- liftIO $ randomRIO (0, l - 1)
     pure $ Just $ vals!!i
 
+{-    allBtcAddrsD = ffor pubStorageD $ \(PubStorage _ cm _ _) -> case Map.lookup BTC cm of
+      Nothing -> []
+      Just CurrencyPubStorage{..} -> V.toList $ extractAddrs _currencyPubStorage'pubKeystore
+-}
+
 btcMempoolTxInserter :: MonadFront t m => Event t HT.Tx -> m (Event t ())
 btcMempoolTxInserter txE = do
   pubStorageD <- getPubStorageD
@@ -168,6 +173,7 @@ checkAddrTx' vec tx = do
     st <- liftIO $ systemToUTCTime <$> getSystemTime
     let meta = (Just (EgvTxMeta Nothing Nothing st))
     pure $ if b then Just (kb, M.singleton th (BtcTx tx meta)) else Nothing
+--    pure $ Just (kb, M.singleton th (BtcTx tx meta))-- else Nothing
   pure $ V.mapMaybe id vec'
   where
     th = HT.txHashToHex $ HT.txHash tx
