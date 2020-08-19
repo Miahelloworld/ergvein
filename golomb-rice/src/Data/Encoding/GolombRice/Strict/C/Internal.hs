@@ -56,7 +56,7 @@ toByteString :: MonadIO m
   -> m ByteString
 toByteString GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriter $ \w -> do
   n <- C.golombrice_writer_length w
-  buff <- C.golombrice_writer_data w 
+  buff <- C.golombrice_writer_data w
   BS.packCStringLen (castPtr buff, n)
 
 class GolombRice a where
@@ -107,8 +107,8 @@ decodeWords :: MonadIO m
   -> m (VS.Vector Word64)
 decodeWords GolombRiceReader{..} n = liftIO $ withForeignPtr golombRiceReader $ \p -> do
   buff <- mallocForeignPtrBytes (n * 8)
-  withForeignPtr buff $ \bptr -> C.golombrice_reader_decode_words p bptr n
-  pure $ VS.unsafeFromForeignPtr0 buff n
+  i <- withForeignPtr buff $ \bptr -> C.golombrice_reader_decode_words p bptr n
+  pure $ VS.unsafeFromForeignPtr0 buff i
 
 -- | Helper that tells fold either to continue or stop scanning
 data Shortcut a = Next !a | Stop !a
