@@ -8,7 +8,7 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Utils
 import Foreign.Ptr
 import GHC.Generics
-import Prelude hiding (length, null)
+import Prelude hiding (length, null, foldl)
 import Data.ByteString (ByteString)
 
 import qualified Data.ByteString as BS
@@ -16,8 +16,9 @@ import qualified Data.ByteString.Unsafe as BS
 import qualified Data.Encoding.GolombRice.Strict.C.Raw as C
 import qualified Data.Vector.Storable as VS
 
-newtype GolombRiceWriter = GolombRiceWriter {
-    golombRiceWriter       :: (ForeignPtr C.GolombRiceWriter)
+data GolombRiceWriter = GolombRiceWriter {
+    golombRiceWriterP      :: !Int
+  , golombRiceWriter       :: !(ForeignPtr C.GolombRiceWriter)
   } deriving (Generic)
 
 data GolombRiceReader = GolombRiceReader {
@@ -34,8 +35,19 @@ empty :: MonadIO m
 empty p n = liftIO $ do
   wp <- C.golombrice_writer_new n p
   wfp <- newForeignPtr C.golombrice_writer_delete_ptr wp
-  pure $ GolombRiceWriter wfp
+  pure $ GolombRiceWriter p wfp
 {-# INLINABLE empty #-}
+
+-- | Helper that initalizes writer stream with single element.
+singleton :: MonadIO m
+  => Int -- ^ Number of bits P in reminder of each element
+  -> Word64 -- ^ Item
+  -> m GolombRiceWriter
+singleton p a = liftIO $ do
+  s <- empty p 8
+  encodeWord s a
+  pure s
+{-# INLINABLE singleton #-}
 
 -- | Start reading golomb rice encoded bytestring. Copies contents of the
 -- bytestring. O(n)
@@ -47,10 +59,31 @@ fromByteString p bs = liftIO $ BS.unsafeUseAsCStringLen bs $ \(ptr, n) -> do
   buff <- mallocForeignPtrBytes n
   wp <- withForeignPtr buff $ \bp -> do
     copyBytes bp (castPtr ptr) n
-    C.golombrice_reader_new bp p
+    C.golombrice_reader_new bp n p
   wfp <- newForeignPtr C.golombrice_reader_delete_ptr wp
   pure $ GolombRiceReader n buff wfp
 {-# INLINABLE fromByteString #-}
+
+-- | Decode all elements from stream into a list
+toList :: MonadIO m
+  => GolombRiceReader
+  -> m [Word64]
+toList = fmap reverse . foldl (\acc a -> pure $! Next (a : acc)) []
+{-# INLINEABLE toList #-}
+
+-- | Decode all words from stream into vector
+toVector :: MonadIO m
+  => GolombRiceReader
+  -> Int -- ^ Reading chunk size (e.x. 64)
+  -> m (VS.Vector Word64)
+toVector s ch = go VS.empty
+  where
+    go !acc = do
+      e <- null s
+      if e then pure acc else do
+        as <- decodeWords s ch
+        go $ acc <> as
+{-# INLINEABLE toVector #-}
 
 -- | Copy encoded result from writer stream.
 toByteString :: MonadIO m
@@ -63,15 +96,39 @@ toByteString GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriter $ \
 {-# INLINABLE toByteString #-}
 
 -- | Helper that writes down all words into new stream
-encodeVector :: MonadIO m
+fromVector :: MonadIO m
   => Int -- ^ Number of bits P in reminder of each element
   -> VS.Vector Word64
   -> m GolombRiceWriter
-encodeVector p vs = do
-  s <- empty p (VS.length vs * 8) -- assume that encoding will be smaller than original buffer 
+fromVector p vs = do
+  s <- empty p (VS.length vs * 8) -- assume that encoding will be smaller than original buffer
   encodeWords s vs
   pure s
-{-# INLINABLE encodeVector #-}
+{-# INLINABLE fromVector #-}
+
+-- | Init writer stream and fill it with list of words.
+fromList :: MonadIO m
+  => Int -- ^ Number of bits P in reminder of each element
+  -> [Word64]
+  -> m GolombRiceWriter
+fromList p = fromVector p . VS.fromList
+{-# INLINE fromList #-}
+
+-- | Convert writer to reader from the written stream.
+--
+-- The operation is unsafe as if writer is destroyed the buffer of reader is also
+-- deallocated.
+toReaderUnsafe :: MonadIO m
+  => GolombRiceWriter
+  -> m GolombRiceReader
+toReaderUnsafe GolombRiceWriter{..} = liftIO $ withForeignPtr golombRiceWriter $ \w -> do
+  n <- C.golombrice_writer_length w
+  buff <- C.golombrice_writer_data w
+  wp <- C.golombrice_reader_new buff n golombRiceWriterP
+  wfp <- newForeignPtr C.golombrice_reader_delete_ptr wp
+  buffp <- newForeignPtr_ buff
+  pure $ GolombRiceReader n buffp wfp
+{-# INLINABLE toReaderUnsafe #-}
 
 class GolombRice a where
   -- | Query if stream contains any data

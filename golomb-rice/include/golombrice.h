@@ -91,11 +91,12 @@ void golombrice_writer_encode_words(struct golombrice_writer_t *self_p,
 * The buf_p parameter is buffer with contents of stream to read. The buffer
 * control (allocation/deallocation) is user responsibility.
 *
+* The n parameter is size of buffer in bytes.
 * The p parameter defines number of bits in remainder part of encoding.
 *
 * Destroy it with golombrice_writer_delete.
 */
-struct golombrice_reader_t* golombrice_reader_new(uint8_t *buf_p, int p);
+struct golombrice_reader_t* golombrice_reader_new(uint8_t *buf_p, int n, int p);
 
 /** Deallocates memory for control structure of golomb rice stream.
 *

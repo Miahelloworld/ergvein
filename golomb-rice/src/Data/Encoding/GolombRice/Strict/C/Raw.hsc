@@ -37,7 +37,7 @@ foreign import ccall unsafe "golombrice_writer_encode_words"
 -}
 
 foreign import ccall unsafe "golombrice_reader_new"
-  golombrice_reader_new :: Ptr CUChar -> Int -> IO (Ptr GolombRiceReader)
+  golombrice_reader_new :: Ptr CUChar -> Int -> Int -> IO (Ptr GolombRiceReader)
 
 foreign import ccall unsafe "golombrice_reader_delete"
   golombrice_reader_delete :: Ptr GolombRiceReader -> IO ()
