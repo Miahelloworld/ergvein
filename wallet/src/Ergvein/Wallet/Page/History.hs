@@ -27,7 +27,9 @@ import Data.Map.Strict as Map
 import Data.Maybe
 import Data.Text as T
 import Data.Word
+import Network.Haskoin.Network
 import Safe
+
 
 import qualified Data.List as L
 
@@ -47,10 +49,21 @@ historyPage cur = do
 
 historyTableWidget :: MonadFront t m => Currency -> m (Event t TransactionView)
 historyTableWidget cur = divClass "history-table" $ case cur of
-  BTC -> do
+  BTC -> mdo
     txE <- requestBTCMempool =<< delay 1 =<< getPostBuild
-    widgetHold (text "test") $ ffor txE $ \msg -> text $ showt msg
-    divClass "Test" $ text "Test"
+    let swE = flip fmap txE $ \msg -> case msg of
+          MAAnswer (MInv _) -> True
+          _ -> False
+    txE2 <- delay 1 txE
+    bH <- hold False swE
+    let txE3 = gate bH txE2
+    mD <- holdDyn [] $ poke txE2 $ \msg -> do
+      mS <- sampleDyn mD
+      pure $ mS <> [msg]
+    widgetHoldDyn $ ffor mD $ \msg -> text $ showt msg
+    --    widgetHold (text "test") $ ffor txE3 $ \msg -> text $ showt msg
+    --divClass "Test" $ text "Test"
+    --widgetHold (text "test") $ ffor (updated mD) $ \msg -> text $ showt msg
     (txsD, hghtD) <- transactionsGetting BTC
     let txMapD = Map.fromList . L.zip [0..] <$> txsD
     mapED <- listWithKey txMapD (\_ -> historyTableRowD hghtD)

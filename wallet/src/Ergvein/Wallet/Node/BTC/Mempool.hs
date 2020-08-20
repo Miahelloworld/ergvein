@@ -1,6 +1,7 @@
 module Ergvein.Wallet.Node.BTC.Mempool
   (
     requestBTCMempool
+  , MempoolAnswers(..)
   ) where
 
 import Control.Monad.Random
