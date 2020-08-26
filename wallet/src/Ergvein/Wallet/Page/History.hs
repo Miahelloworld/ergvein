@@ -29,9 +29,20 @@ import Data.Text as T
 import Data.Word
 import Network.Haskoin.Network
 import Safe
+import System.Directory
+
+import Data.Aeson
+import Ergvein.Aeson
+
+
+import Control.Monad.IO.Class
 
 
 import qualified Data.List as L
+
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 
 historyPage :: MonadFront t m => Currency -> m ()
 historyPage cur = do
@@ -59,8 +70,11 @@ historyTableWidget cur = divClass "history-table" $ case cur of
     let txE3 = gate bH txE2
     mD <- holdDyn [] $ poke txE2 $ \msg -> do
       mS <- sampleDyn mD
-      pure $ mS <> [msg]
-    widgetHoldDyn $ ffor mD $ \msg -> text $ showt msg
+      let mess = mS <> [msg]
+      pure mess
+    --widgetHoldDyn $ ffor mD --$ \msg -> text $ showt msg
+    --performEvent_ $ ffor (updated mD) $ \ms -> saveMempoolLog ms
+    performEvent_ $ ffor txE $ \ms -> saveMempoolLog2 ms
     --    widgetHold (text "test") $ ffor txE3 $ \msg -> text $ showt msg
     --divClass "Test" $ text "Test"
     --widgetHold (text "test") $ ffor (updated mD) $ \msg -> text $ showt msg
@@ -68,10 +82,26 @@ historyTableWidget cur = divClass "history-table" $ case cur of
     let txMapD = Map.fromList . L.zip [0..] <$> txsD
     mapED <- listWithKey txMapD (\_ -> historyTableRowD hghtD)
     let txClickE = switchDyn $ mergeMap <$> mapED
+
     pure $ fmapMaybe id $ headMay . Map.elems <$> txClickE
   ERGO -> do
     txClickE <- traverse historyTableRow []
     pure $ leftmost txClickE
+
+saveMempoolLog :: MonadIO m => [MempoolAnswers] -> m ()
+saveMempoolLog mc = liftIO $ do
+  home <- getHomeDirectory
+  let mcpath = home <> "/.ergvein/mempool.log"
+  ex <- liftIO $ doesFileExist mcpath
+  liftIO $ T.appendFile mcpath $ showt mc
+
+saveMempoolLog2 :: MonadIO m => MempoolAnswers -> m ()
+saveMempoolLog2 mc = liftIO $ do
+  home <- getHomeDirectory
+  let mcpath = home <> "/.ergvein/mempool2.log"
+  ex <- liftIO $ doesFileExist mcpath
+  liftIO $ T.appendFile mcpath $ showt mc
+
 
 historyTableRow :: MonadFront t m => TransactionView -> m (Event t TransactionView)
 historyTableRow tr@TransactionView{..} = divButton "history-table-row" $ do
