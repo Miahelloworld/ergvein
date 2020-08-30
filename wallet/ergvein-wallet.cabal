@@ -72,6 +72,7 @@ library
         Ergvein.Wallet.Log.Types
         Ergvein.Wallet.Log.Writer
         Ergvein.Wallet.Main
+        Ergvein.Wallet.Mempool.Types
         Ergvein.Wallet.Menu
         Ergvein.Wallet.Menu.Switcher
         Ergvein.Wallet.Menu.Types
