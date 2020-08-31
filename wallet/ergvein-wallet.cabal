@@ -199,6 +199,7 @@ library
         parsec -any,
         process >=1.6 && <1.7,
         qrcode-core,
+        random-shuffle,
         ref-tf >=0.4 && <0.5,
         reflex >=0.4 && <0.7,
         reflex-dom >=0.4 && <0.7,
@@ -226,8 +227,7 @@ library
         vector -any,
         vector-algorithms,
         wreq -any,
-        yaml -any,
-        random-shuffle
+        yaml -any
 
     if flag(android)
         cpp-options: -DANDROID
