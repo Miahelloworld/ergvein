@@ -22,7 +22,6 @@ import           Data.Maybe (fromMaybe)
 
 qrCodeWidget :: MonadFrontBase t m => Text -> Currency -> m (Element EventResult GhcjsDomSpace t, CanvasOptions)
 qrCodeWidget addr cur = divClass "qrcode-container" $ mdo
-    --divClass "test" $ text $ drawGridT canvasW canvasH (qrcPerCanvas qrData canvasW)
     canvasEl <- createCanvas cOpts
     rawJSCall (_element_raw canvasEl) $ drawGridT canvasW canvasH (qrcPerCanvas qrData canvasW)
     pure (canvasEl, cOpts)
