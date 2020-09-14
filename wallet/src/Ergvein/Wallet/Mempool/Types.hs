@@ -10,6 +10,7 @@ import Data.ByteString
 import Database.LMDB.Simple
 import Network.Haskoin.Block
 import Network.Haskoin.Crypto
+import Network.Haskoin.Transaction
 
 import Ergvein.Filters.Btc.Mutable
 import Ergvein.Types.Block
@@ -24,15 +25,8 @@ mempoolCacheDbName = "mempoolcache"
 -- | Force creation of datab
 initBtcDbs :: Transaction ReadWrite ()
 initBtcDbs = do
-  fdb <- getBtcFiltersDb
-  hdb <- getBtcHeightsDb
-  tdb <- getBtcTotalDb
-  tdb `seq` hdb `seq` fdb `seq` pure ()
-  mtotal <- get tdb ()
-  let h = filterStartingHeight BTC
-  case mtotal of
-    Nothing -> put tdb () $ Just h
-    Just v -> if h > v then put tdb () $ Just h else pure ()
+  mdb <- getMempoolCacheDb
+  put mdb ()
 
 cleanBtcDbs :: Transaction ReadWrite ()
 cleanBtcDbs = do
