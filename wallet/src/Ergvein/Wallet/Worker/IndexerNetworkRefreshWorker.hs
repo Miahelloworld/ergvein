@@ -1,10 +1,114 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
-module Ergvein.Wallet.Worker.IndexersNetworkActualization
-  (
-    indexersNetworkActualizationWorker
+module Ergvein.Wallet.Worker.IndexerNetworkRefreshWorker
+  ( indexerNetworkRefreshWorker
+  , getAll
   ) where
 
-indexersNetworkActualizationWorker = undefined
+import Control.Monad.Reader
+import Control.Monad.Zip
+import Data.Bifunctor
+import Data.Maybe
+import Data.Time
+import Data.List
+import Reflex.ExternalRef
+import Data.Either
+
+import Ergvein.Text
+import Ergvein.Types.Transaction
+import Ergvein.Wallet.Monad.Async
+import Ergvein.Wallet.Monad.Client
+import Ergvein.Wallet.Monad.Front
+import Ergvein.Wallet.Native
+import Ergvein.Wallet.Settings
+import Ergvein.Index.Protocol.Types
+import Network.DNS.Lookup
+import Network.DNS.Types
+import Network.DNS.Resolver
+import Network.Socket
+import Data.IP
+
+import Data.Set (Set)
+import Data.Map.Strict (Map)
+import Data.Word
+
+import qualified Data.List          as L
+import qualified Data.Map.Strict    as Map
+import qualified Data.Set           as Set
+import qualified Data.Text          as T
+
+infoWorkerInterval :: NominalDiffTime
+infoWorkerInterval = 60
+
+indexersCountE :: MonadIndexClient t m =>  m (Event t Int)
+indexersCountE = do
+  indexersD <- externalRefDynamic =<< getActiveConnsRef
+  pure $ updated $ length . Map.elems <$> indexersD
+
+getDNS :: [Domain] -> IO (Maybe [SockAddr])
+getDNS domains = findMMaybe f domains
+  where
+    f :: Domain -> IO (Maybe [SockAddr])
+    f x = do
+      r <- resolve x
+      pure $ if null r then Nothing else Just r
+    resolve :: Domain -> IO [SockAddr]
+    resolve domain = do
+      rs <- makeResolvSeed defaultResolvConf
+      withResolver rs $ \r -> do
+        v4 <- lookupA r domain
+        v6 <- lookupAAAA r domain
+        pure $ concat $ rights [(fmap tran4 <$> v4), (fmap tran6 <$> v6)]
+
+    tran4 :: IPv4 -> SockAddr
+    tran4 v4 = let 
+      [a] = fromIntegral <$> fromIPv4 v4
+      in SockAddrInet 8667 a
+
+    tran6 :: IPv6 -> SockAddr
+    tran6 v6 = let 
+      [a,b,c,d] = fromIntegral <$> fromIPv6 v6
+      in SockAddrInet6 8667 0 (a, b, c, d) 0
+    
+    findMapMMaybe :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe b)
+    findMapMMaybe f (x:xs) = do
+      r <- f x
+      if isJust r then
+        pure r
+      else
+        findMMaybe f xs
+    findMMaybe f [] = pure Nothing
+
+getAll :: MonadIndexClient t m =>  m (Event t PeerResponse)
+getAll = do
+  indexersD <- externalRefDynamic =<< getActiveConnsRef
+  ix <- readExternalRef =<< getActiveConnsRef
+  let l  = Map.toList ix
+  let s = length l
+  let x = s - if s > 2 then ceiling $ fromIntegral s / 2 else s
+  let z = indexConAddr <$> (sortBy (\x-> compare (indexConnEstablishedAt x) . indexConnEstablishedAt ) (snd <$> l))
+  pure $ switchDyn $ leftmost . fmap (fmapMaybe onlyPeerResponse . indexConRespE) . Map.elems <$> indexersD
+  where
+    onlyPeerResponse = \case
+      MPeerResponse peerResponse -> Just peerResponse
+      _ -> Nothing
+
+indexerNetworkRefreshWorker :: MonadFront t m => m ()
+indexerNetworkRefreshWorker = do
+  buildE            <- getPostBuild
+  te                <- void <$> tickLossyFromPostBuildTime infoWorkerInterval
+  activeUrlsRef     <- getActiveConnsRef
+
+  let goE = leftmost [void te, buildE]
+  void <$> activateURLList =<< (performEvent $ ffor goE $ const $ do
+    ix <- readExternalRef activeUrlsRef
+    let l  = Map.toList ix
+        s = length l
+        x = s - if s > 2 then ceiling $ fromIntegral s / 2 else s
+        z = indexConAddr <$> (sortBy (\x-> compare (indexConnEstablishedAt x) . indexConnEstablishedAt ) (snd <$> l))
+    pure z)
+
+  --broadcastIndexerMessage $ (IndexerMsg $ MPeerRequest PeerRequest) <$ goE
+
 {-}
 import Control.Monad.Reader
 import Control.Monad.Zip

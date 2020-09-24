@@ -191,7 +191,7 @@ inactivePageWidget = mdo
   showD <- holdDyn False $ leftmost [False <$ hideE, tglE]
   hideE <- deactivateURL =<< addUrlWidget showD
   let addrsMapD = (M.fromList . fmap (,()) . S.toList) <$> addrsD
-  void $ listWithKey addrsMapD $ \addr _ -> renderInactive pingAllE addr
+  void $ listWithKey addrsMapD $ \addr _ -> renderInactive pingAllE addr 
   (pingAllE, tglE) <- divClass "network-wrapper mt-1" $ divClass "net-btns-2" $ do
     pingAllE' <- buttonClass "button button-outline m-0" NSSPingAll
     tglE' <- fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b ->

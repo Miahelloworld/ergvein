@@ -27,7 +27,7 @@ import Data.Function (on)
 import Data.Functor.Misc (Const2(..))
 import Data.Map.Strict (Map)
 import Data.Set (Set)
-import Data.Time(NominalDiffTime, getCurrentTime, diffUTCTime)
+import Data.Time(UTCTime, NominalDiffTime, getCurrentTime, diffUTCTime)
 import Network.Socket (SockAddr)
 import Reflex
 import Reflex.Dom
@@ -45,11 +45,12 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 data IndexerConnection t = IndexerConnection {
-  indexConAddr :: !SockAddr
-, indexConClosedE :: !(Event t ())
-, indexConOpensE :: !(Event t ())
-, indexConIsUp :: !(Dynamic t Bool)
-, indexConRespE :: !(Event t Message)
+  indexConAddr           :: !SockAddr
+, indexConnEstablishedAt :: UTCTime
+, indexConClosedE        :: !(Event t ())
+, indexConOpensE         :: !(Event t ())
+, indexConIsUp           :: !(Dynamic t Bool)
+, indexConRespE          :: !(Event t Message)
 }
 
 data IndexerMsg = IndexerClose | IndexerRestart | IndexerMsg Message

@@ -13,6 +13,7 @@ import Control.Monad.Random
 import Data.Maybe
 import Data.Text
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Time.Clock
 import Data.Word
 import Network.Socket hiding (socket)
 import Reflex
@@ -70,8 +71,10 @@ initIndexerConnection sa msgE = mdo
         _ -> Nothing
   shakeD <- holdDyn False $ leftmost [verAckE, False <$ closeE]
   let openE = fmapMaybe (\b -> if b then Just () else Nothing) $ updated shakeD
+  currentTime <- liftIO getCurrentTime
   pure $ IndexerConnection {
       indexConAddr = sa
+    , indexConnEstablishedAt = currentTime
     , indexConClosedE = () <$ _socketClosed s
     , indexConOpensE = openE
     , indexConIsUp = shakeD
