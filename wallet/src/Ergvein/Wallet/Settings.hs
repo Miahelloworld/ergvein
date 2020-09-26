@@ -24,6 +24,12 @@ import Data.Yaml (encodeFile)
 import Network.Socket
 import System.Directory
 
+import Network.DNS.Lookup
+import Network.DNS.Types
+import Network.DNS.Resolver
+import Data.IP
+import Data.Either
+
 import Ergvein.Aeson
 import Ergvein.Lens
 import Ergvein.Types.Currency
@@ -142,11 +148,12 @@ defaultIndexerTimeout = 20
 defaultActUrlNum :: Int
 defaultActUrlNum = 10
 
-defaultSettings :: FilePath -> Settings
-defaultSettings home =
+defaultSettings :: (MonadIO m) => FilePath -> m Settings
+defaultSettings home = do
   let storePath   = home <> "/store"
       configPath  = home <> "/config.yaml"
-  in Settings {
+  dns <- liftIO $ getDNS dnsList
+  pure $ Settings {
         settingsLang              = English
       , settingsStoreDir          = pack storePath
       , settingsConfigPath        = pack configPath
@@ -169,6 +176,43 @@ storeSettings s = liftIO $ do
   createDirectoryIfMissing True $ unpack $ T.dropEnd 1 $ fst $ T.breakOnEnd "/" configPath
   encodeFile (unpack configPath) s
 
+dnsList :: [Domain]
+dnsList = ["seed.cypra.io"]
+
+getDNS :: [Domain] -> IO (Maybe [SockAddr])
+getDNS domains = findMMaybe f domains
+  where
+    f :: Domain -> IO (Maybe [SockAddr])
+    f x = do
+      r <- resolve x
+      pure $ if length r < 2 then Nothing else Just r
+    resolve :: Domain -> IO [SockAddr]
+    resolve domain = do
+      rs <- makeResolvSeed defaultResolvConf
+      withResolver rs $ \r -> do
+        v4 <- lookupA r domain
+        v6 <- lookupAAAA r domain
+        pure $ concat $ rights [(fmap tran4 <$> v4), (fmap tran6 <$> v6)]
+
+    tran4 :: IPv4 -> SockAddr
+    tran4 v4 = let 
+      [a] = fromIntegral <$> fromIPv4 v4
+      in SockAddrInet 8667 a
+
+    tran6 :: IPv6 -> SockAddr
+    tran6 v6 = let 
+      [a,b,c,d] = fromIntegral <$> fromIPv6 v6
+      in SockAddrInet6 8667 0 (a, b, c, d) 0
+    
+    findMapMMaybe :: Monad m => (a -> m (Maybe b)) -> [a] -> m (Maybe b)
+    findMapMMaybe f (x:xs) = do
+      r <- f x
+      if isJust r then
+        pure r
+      else
+        findMMaybe f xs
+    findMMaybe f [] = pure Nothing
+
 #ifdef ANDROID
 loadSettings :: (MonadIO m, PlatformNatives) => Maybe FilePath -> m Settings
 loadSettings = const $ liftIO $ do
@@ -179,7 +223,7 @@ loadSettings = const $ liftIO $ do
       let configPath = path <> "/config.yaml"
       ex <- doesFileExist configPath
       cfg <- if not ex
-        then pure $ defaultSettings path
+        then defaultSettings path
         else fmap (either (const $ defaultSettings path) id) $ readYamlEither' configPath
       createDirectoryIfMissing True (unpack $ settingsStoreDir cfg)
       encodeFile (unpack $ settingsConfigPath cfg) cfg
@@ -193,7 +237,7 @@ mkDefSettings = liftIO $ do
   putStrLn $ "Config path: " <> home <> "/.ergvein/config.yaml"
   putStrLn $ "Store  path: " <> home <> "/.ergvein/store"
   putStrLn $ "Language   : English"
-  pure $ defaultSettings (home <> "/.ergvein")
+  defaultSettings (home <> "/.ergvein")
 
 loadSettings :: MonadIO m => Maybe FilePath -> m Settings
 loadSettings mpath = liftIO $ case mpath of

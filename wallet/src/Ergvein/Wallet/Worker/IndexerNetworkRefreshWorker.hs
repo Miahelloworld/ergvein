@@ -19,7 +19,6 @@ import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Monad.Client
 import Ergvein.Wallet.Monad.Front
 import Ergvein.Wallet.Native
-import Ergvein.Wallet.Settings
 import Ergvein.Index.Protocol.Types
 import Network.DNS.Lookup
 import Network.DNS.Types
@@ -44,20 +43,23 @@ indexersCountE = do
   indexersD <- externalRefDynamic =<< getActiveConnsRef
   pure $ updated $ length . Map.elems <$> indexersD
 
-getDNS :: [Domain] -> IO (Maybe [SockAddr])
+dnsList :: [Domain]
+dnsList = ["seed.cypra.io"]
+
+getDNS :: [Domain] -> IO (Maybe [Text])
 getDNS domains = findMMaybe f domains
   where
-    f :: Domain -> IO (Maybe [SockAddr])
+    f :: Domain -> IO (Maybe [Text])
     f x = do
       r <- resolve x
-      pure $ if null r then Nothing else Just r
-    resolve :: Domain -> IO [SockAddr]
+      pure $ if length r < 2 then Nothing else Just r
+    resolve :: Domain -> IO [Text]
     resolve domain = do
       rs <- makeResolvSeed defaultResolvConf
       withResolver rs $ \r -> do
         v4 <- lookupA r domain
         v6 <- lookupAAAA r domain
-        pure $ concat $ rights [(fmap tran4 <$> v4), (fmap tran6 <$> v6)]
+        pure $ concat $ rights [(fmap showt <$> v4), (fmap showt <$> v6)]
 
     tran4 :: IPv4 -> SockAddr
     tran4 v4 = let 
