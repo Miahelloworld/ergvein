@@ -8,7 +8,7 @@ cabal-version:       >=2.0
 
 flag testnet
   description: Build the testnet version
-  default: True
+  default: False
   manual: True
 
 library
@@ -17,8 +17,8 @@ library
     Ergvein.Types
     Ergvein.Types.Address
     Ergvein.Types.AuthInfo
-    Ergvein.Types.Block
     Ergvein.Types.Currency
+    Ergvein.Types.Derive
     Ergvein.Types.Fees
     Ergvein.Types.Keys
     Ergvein.Types.Network
@@ -35,6 +35,7 @@ library
     , cereal
     , containers                >= 0.6      && < 0.7
     , cryptonite                >= 0.25     && < 0.26
+    , deepseq                   >= 1.4      && < 1.5
     , ergvein-common
     , ergvein-crypto
     , flat

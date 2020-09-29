@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Ergvein.Types.Storage where
 
 import Control.Lens (makeLenses, (&), (%~))
@@ -12,25 +13,29 @@ import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Text
 import Data.Vector (Vector)
+import Data.Word
 import Network.Haskoin.Keys
 import qualified Network.Haskoin.Block as HB
 
 import Ergvein.Aeson
 import Ergvein.Text
 import Ergvein.Types.Currency
+import Ergvein.Types.Derive
 import Ergvein.Types.Keys
 import Ergvein.Types.Transaction
 import Ergvein.Types.Utxo
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import qualified Data.Vector as V
 
 type WalletName = Text
 
 type Password = Text
 
 data CurrencyPrvStorage = CurrencyPrvStorage {
-    _currencyPrvStorage'prvKeystore :: PrvKeystore
+    _currencyPrvStorage'prvKeystore :: !PrvKeystore
+  , _currencyPrvStorage'path        :: !(Maybe DerivPrefix)
   } deriving (Eq, Show, Read)
 
 makeLenses ''CurrencyPrvStorage
@@ -40,25 +45,28 @@ $(deriveJSON aesonOptionsStripToApostroph ''CurrencyPrvStorage)
 type CurrencyPrvStorages = M.Map Currency CurrencyPrvStorage
 
 data PrvStorage = PrvStorage {
-    _prvStorage'seed                :: Seed
+    _prvStorage'mnemonic            :: Mnemonic
   , _prvStorage'rootPrvKey          :: EgvRootXPrvKey
   , _prvStorage'currencyPrvStorages :: CurrencyPrvStorages
+  , _prvStorage'pathPrefix          :: !(Maybe DerivPrefix)
   } deriving (Eq, Show, Read)
 
 makeLenses ''PrvStorage
 
 instance ToJSON PrvStorage where
   toJSON PrvStorage{..} = object [
-      "seed"                .= toJSON (bs2Base64Text _prvStorage'seed)
+      "mnemonic"            .= toJSON _prvStorage'mnemonic
     , "rootPrvKey"          .= toJSON _prvStorage'rootPrvKey
     , "currencyPrvStorages" .= toJSON _prvStorage'currencyPrvStorages
+    , "pathPrefix"          .= toJSON _prvStorage'pathPrefix
     ]
 
 instance FromJSON PrvStorage where
   parseJSON = withObject "PrvStorage" $ \o -> PrvStorage
-    <$> fmap base64Text2bs (o .: "seed")
+    <$> o .: "mnemonic"
     <*> o .: "rootPrvKey"
     <*> o .: "currencyPrvStorages"
+    <*> o .:? "pathPrefix" .!= Just legacyDerivPathPrefix
 
 data EncryptedPrvStorage = EncryptedPrvStorage {
     _encryptedPrvStorage'ciphertext :: ByteString
@@ -86,6 +94,7 @@ instance FromJSON EncryptedPrvStorage where
 
 data CurrencyPubStorage = CurrencyPubStorage {
     _currencyPubStorage'pubKeystore   :: !PubKeystore
+  , _currencyPubStorage'path          :: !(Maybe DerivPrefix)
   , _currencyPubStorage'transactions  :: !(M.Map TxId EgvTx)
   , _currencyPubStorage'height        :: !(Maybe BlockHeight)     -- ^ Last height seen by the wallet
   , _currencyPubStorage'scannedKey    :: !(Maybe Int, Maybe Int)  -- ^ When restoring here we put which keys are we already scanned
@@ -93,14 +102,15 @@ data CurrencyPubStorage = CurrencyPubStorage {
   , _currencyPubStorage'scannedHeight :: !(Maybe BlockHeight)
   , _currencyPubStorage'headers       :: !(M.Map HB.BlockHash HB.BlockHeader)
   , _currencyPubStorage'outgoing      :: !(S.Set TxId)
+  , _currencyPubStorage'headerSeq     :: !(Word32, V.Vector (HB.BlockHeight, HB.BlockHash))
   } deriving (Eq, Show, Read)
 
 makeLenses ''CurrencyPubStorage
 
+$(deriveJSON aesonOptionsStripToApostroph ''CurrencyPubStorage)
+
 instance FromJSONKey HB.BlockHash where
 instance ToJSONKey HB.BlockHash where
-
-$(deriveJSON aesonOptionsStripToApostroph ''CurrencyPubStorage)
 
 type CurrencyPubStorages = M.Map Currency CurrencyPubStorage
 
@@ -109,6 +119,7 @@ data PubStorage = PubStorage {
   , _pubStorage'currencyPubStorages :: !CurrencyPubStorages
   , _pubStorage'activeCurrencies    :: [Currency]
   , _pubStorage'restoring           :: !Bool -- ^ Flag to track unfinished process of restoration
+  , _pubStorage'pathPrefix          :: !(Maybe DerivPrefix)
   } deriving (Eq, Show, Read)
 
 makeLenses ''PubStorage
@@ -126,8 +137,8 @@ pubStorageKeys c kp = fmap pubKeyBox'key . maybe mempty keys . fmap _currencyPub
 pubStoragePubMaster :: Currency -> PubStorage -> Maybe EgvXPubKey
 pubStoragePubMaster c = fmap pubKeystore'master . pubStorageKeyStorage c
 
-pubStorageLastUnused :: Currency -> KeyPurpose -> PubStorage -> Maybe (Int, EgvPubKeyBox)
-pubStorageLastUnused c kp ps = getLastUnusedKey kp . _currencyPubStorage'pubKeystore =<< M.lookup c (_pubStorage'currencyPubStorages ps)
+pubStorageLastUnusedKey :: Currency -> KeyPurpose -> PubStorage -> Maybe (Int, EgvPubKeyBox)
+pubStorageLastUnusedKey c kp ps = getLastUnusedKey kp . _currencyPubStorage'pubKeystore =<< M.lookup c (_pubStorage'currencyPubStorages ps)
 
 pubStorageScannedKeys :: Currency -> KeyPurpose -> PubStorage -> Int
 pubStorageScannedKeys c p ps = fromMaybe 0 $ f . _currencyPubStorage'scannedKey =<< M.lookup c (_pubStorage'currencyPubStorages ps)

@@ -8,6 +8,10 @@ import Ergvein.Wallet.Language
 data InitialPageStrings =
     IPSCreate
   | IPSRestore
+  | IPSChooseRestorationMethod
+  | IPSRestoreFromMnemonic
+  | IPSRestoreFromSeed
+  | IPSNetwork
   | IPSSelectWallet
   | IPSOtherOptions
   | IPSPinCode
@@ -17,18 +21,26 @@ data InitialPageStrings =
 instance LocalizedPrint InitialPageStrings where
   localizedShow l v = case l of
     English -> case v of
-      IPSCreate       -> "Create wallet"
-      IPSRestore      -> "Restore wallet"
-      IPSSelectWallet -> "Select wallet"
-      IPSOtherOptions -> "Either"
-      IPSPinCode      -> "PIN code:"
-      IPSPinCodeError -> "Invalid code"
-      IPSLastWallet   -> "Last used wallet"
+      IPSCreate                  -> "Create new wallet"
+      IPSRestore                 -> "Restore wallet"
+      IPSChooseRestorationMethod -> "Choose restoration method"
+      IPSRestoreFromMnemonic     -> "Mnemonic phrase"
+      IPSRestoreFromSeed         -> "Seed"
+      IPSSelectWallet            -> "Select wallet"
+      IPSOtherOptions            -> "Either"
+      IPSPinCode                 -> "PIN code:"
+      IPSPinCodeError            -> "Invalid code"
+      IPSLastWallet              -> "Last used wallet"
+      IPSNetwork                 -> "Setup indexers"
     Russian -> case v of
-      IPSCreate       -> "Создать кошелёк"
-      IPSRestore      -> "Восстановить кошелёк"
-      IPSSelectWallet -> "Выберите кошелёк"
-      IPSOtherOptions -> "Или"
-      IPSPinCode      -> "ПИН код:"
-      IPSPinCodeError -> "Неправильный код"
-      IPSLastWallet   -> "Последний использованный кошелек"
+      IPSCreate                  -> "Создать новый кошелёк"
+      IPSRestore                 -> "Восстановить кошелёк"
+      IPSChooseRestorationMethod -> "Выберите метод восстановления"
+      IPSRestoreFromMnemonic     -> "Мнемоническая фраза"
+      IPSRestoreFromSeed         -> "Seed"
+      IPSSelectWallet            -> "Выберите кошелёк"
+      IPSOtherOptions            -> "Или"
+      IPSPinCode                 -> "ПИН код:"
+      IPSPinCodeError            -> "Неправильный код"
+      IPSLastWallet              -> "Последний использованный кошелек"
+      IPSNetwork                 -> "Настроить индексеры"

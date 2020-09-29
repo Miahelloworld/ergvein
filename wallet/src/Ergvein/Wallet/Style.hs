@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# LANGUAGE OverloadedLists #-}
 module Ergvein.Wallet.Style(
     compileFrontendCss
@@ -5,8 +6,6 @@ module Ergvein.Wallet.Style(
 
 import Clay
 import Clay.Selector
-import Clay.Display
-import Clay.Stylesheet (prefixed)
 import Control.Monad
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (toStrict)
@@ -104,6 +103,7 @@ frontendCss r = do
   selectCss
   sendPageCss
   settingsCss
+  mnemonicExportCss
   sharePageCss
   validateCss
   wrapperCss
@@ -140,10 +140,14 @@ desktopBreakpoint :: Size LengthUnit
 desktopBreakpoint = rem 120
 
 htmlCss :: Css
-htmlCss = html ? do
-  margin (px 0) (px 0) (px 0) (px 0)
-  padding (px 0) (px 0) (px 0) (px 0)
-  textAlign center
+htmlCss = do
+  html ? do
+    margin (px 0) (px 0) (px 0) (px 0)
+    padding (px 0) (px 0) (px 0) (px 0)
+    textAlign center
+  "input, textarea, select" ? do
+    fontFamily ["Roboto"] [sansSerif, monospace]
+    fontSize $ pt 14
 
 bodyCss :: Css
 bodyCss = body ? do
@@ -151,7 +155,7 @@ bodyCss = body ? do
   padding (px 0) (px 0) (px 0) (px 0)
   color textColor
   backgroundColor majorBackground
-  fontFamily ["Roboto"] []
+  fontFamily ["Roboto"] [sansSerif, monospace]
 
 wrapperCss :: Css
 wrapperCss = do
@@ -282,9 +286,12 @@ navbarCss = do
   ".navbar-status" ? do
     display flex
     justifyContent center
-    fontSize $ pt 20
+{-  fontSize $ pt 20
+  marginBottom $ rem 1
+  color $ rgb 100 100 100-}
+    fontSize $ pt 14
     marginBottom $ rem 1
-    color $ rgb 100 100 100
+    color silver
   ".navbar-android-controls-wrapper" ? do
     display flex
     justifyContent center
@@ -341,9 +348,9 @@ fontFamilies Resources{..} = do
   makeFontFace "Roboto-Black" robotoBlackUrl
   makeFontFace "Roboto-Medium" robotoMediumUrl
   where
-    makeFontFace name url = fontFace $ do
-      fontFamily [name] []
-      fontFaceSrc [FontFaceSrcUrl url (Just TrueType)]
+    makeFontFace fontName fontUrl = fontFace $ do
+      fontFamily [fontName] []
+      fontFaceSrc [FontFaceSrcUrl fontUrl (Just TrueType)]
       fontWeight $ weight 400
 
 faFontFamilies :: Resources -> Css
@@ -370,11 +377,11 @@ faFontFamilies Resources{..} = do
     , fasolid900woff2Url
     ]
   where
-    makeFontFace name w urls = fontFace $ do
-      fontFamily [name] []
+    makeFontFace ffName w urls = fontFace $ do
+      fontFamily [ffName] []
       fontStyle normal
-      fontFaceSrc [FontFaceSrcUrl url (Just format)
-        | url    <- urls,
+      fontFaceSrc [FontFaceSrcUrl ffUrl (Just format)
+        | ffUrl    <- urls,
           format <- [EmbeddedOpenType, SVG, TrueType, WOFF, WOFF2]]
       fontWeight $ weight w
 
@@ -432,6 +439,20 @@ settingsCss :: Css
 settingsCss = do
   ".initial-options" ? do
     margin (rem 0) auto (rem 0) auto
+
+mnemonicExportCss :: Css
+mnemonicExportCss = do
+  ".mnemonic-export-text" ? do
+    wordBreak breakAll
+  ".mnemonic-export-buttons-wrapper" ? do
+    display flex
+    flexWrap F.wrap
+    marginLeft $ rem (-1)
+    marginRight $ rem (-1)
+    justifyContent center
+  ".mnemonic-export-btn-wrapper" ? do
+    paddingLeft $ rem 0.5
+    paddingRight $ rem 0.5
 
 validateCss :: Css
 validateCss = do

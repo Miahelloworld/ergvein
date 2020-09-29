@@ -39,6 +39,7 @@ module Ergvein.Wallet.Elements(
   , fieldsetClass
   , label
   , imgClass
+  , linedText
   , colonize
   , colonize_
   , buttonClass
@@ -62,9 +63,10 @@ import Ergvein.Wallet.Monad.Front
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.OpenUrl
 import Ergvein.Wallet.Util
-import Reflex
-import Reflex.Dom
+import Control.Monad.Fix (MonadFix)
 import Reflex.Localize
+
+import qualified Data.Text as T
 
 container :: DomBuilder t m => m a -> m a
 container = divClass "container"
@@ -169,6 +171,9 @@ chunked :: Int -> [a] -> [[a]]
 chunked _ [] = []
 chunked n xs = take n xs : chunked n (drop n xs)
 
+linedText :: (DomBuilder t m, PostBuild t m, MonadHold t m, MonadFix m) => Dynamic t Text -> m ()
+linedText textD = void $ simpleList (T.lines <$> textD) (\t -> dynText t >> br)
+
 -- | Traverse container and render widgets for each element in rows
 colonize :: (DomBuilder t m)
   => Int -- ^ Amount of columns in row
@@ -222,7 +227,7 @@ divButton = mkButton "div" []
 -- The first parameter is the button text
 -- The second parameter is the icon class
 -- Usage example:
--- >>> outlineTextIconButton BtnPasteString "fas fa-clipboard"
+-- >>> outlineTextIconButton CSPaste "fas fa-clipboard"
 -- As a result, such an element will be created:
 -- <button class="button button-outline href="return false;">
 --   Scan QR code
