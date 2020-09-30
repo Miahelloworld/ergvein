@@ -23,7 +23,7 @@ import Data.Time (NominalDiffTime)
 import Data.Yaml (encodeFile)
 import Network.Socket
 import System.Directory
-
+import Ergvein.Wallet.Native
 import Network.DNS.Lookup
 import Network.DNS.Types
 import Network.DNS.Resolver
@@ -31,9 +31,13 @@ import Data.IP
 import Data.Either
 
 import Ergvein.Aeson
+import Ergvein.Wallet.Util
+import Ergvein.Text
+import Ergvein.Wallet.Native
 import Ergvein.Lens
 import Ergvein.Types.Currency
 import Ergvein.Wallet.Language
+import Debug.Trace
 import Ergvein.Wallet.Yaml(readYamlEither')
 
 import qualified Data.Map.Strict as M
@@ -133,10 +137,7 @@ instance ToJSON Settings where
 
 defaultIndexers :: [Text]
 defaultIndexers = [
-    "139.59.142.25:8667"      -- ergvein-indexermainnet1.hxr.team:8667
-  , "35.176.95.50:8667"       -- ergvein-indexermainnet2.hxr.team:8667
-  , "84.201.147.96:8667"      -- ergvein-indexermainnet3.hxr.team:8667
-  , "188.244.4.78:8667"       -- OwO
+  "127:0:0:8667"       -- OwO
   ]
 
 defaultIndexersNum :: (Int, Int)
@@ -152,7 +153,7 @@ defaultSettings :: (MonadIO m) => FilePath -> m Settings
 defaultSettings home = do
   let storePath   = home <> "/store"
       configPath  = home <> "/config.yaml"
-  dns <- liftIO $ getDNS dnsList
+  
   pure $ Settings {
         settingsLang              = English
       , settingsStoreDir          = pack storePath
@@ -168,7 +169,7 @@ defaultSettings home = do
       , settingsDeactivatedAddrs  = []
       , settingsArchivedAddrs     = []
       }
-
+ 
 -- | TODO: Implement some checks to see if the configPath folder is ok to write to
 storeSettings :: MonadIO m => Settings -> m ()
 storeSettings s = liftIO $ do
@@ -180,7 +181,7 @@ dnsList :: [Domain]
 dnsList = ["seed.cypra.io"]
 
 getDNS :: [Domain] -> IO (Maybe [SockAddr])
-getDNS domains = findMMaybe f domains
+getDNS domains = findMapMMaybe f domains
   where
     f :: Domain -> IO (Maybe [SockAddr])
     f x = do
@@ -189,10 +190,10 @@ getDNS domains = findMMaybe f domains
     resolve :: Domain -> IO [SockAddr]
     resolve domain = do
       rs <- makeResolvSeed defaultResolvConf
-      withResolver rs $ \r -> do
+      withResolver rs $ \r -> do 
         v4 <- lookupA r domain
         v6 <- lookupAAAA r domain
-        pure $ concat $ rights [(fmap tran4 <$> v4), (fmap tran6 <$> v6)]
+        pure $ [] ++ (concat $ rights [(fmap tran4 <$> v4), (fmap tran6 <$> v6)])
 
     tran4 :: IPv4 -> SockAddr
     tran4 v4 = let 
@@ -210,12 +211,14 @@ getDNS domains = findMMaybe f domains
       if isJust r then
         pure r
       else
-        findMMaybe f xs
-    findMMaybe f [] = pure Nothing
+        findMapMMaybe f xs
+    findMapMMaybe f [] = pure Nothing
 
 #ifdef ANDROID
 loadSettings :: (MonadIO m, PlatformNatives) => Maybe FilePath -> m Settings
 loadSettings = const $ liftIO $ do
+  
+  
   mpath <- getFilesDir =<< getHaskellActivity
   case mpath of
     Nothing -> fail "Ergvein panic! No local folder!"
@@ -248,6 +251,10 @@ loadSettings mpath = liftIO $ case mpath of
     putStrLn path
     loadSettings $ Just path
   Just path -> do
+    dns <- liftIO $ getDNS dnsList
+    traceM "================================================"
+    traceM $ show dns
+    traceM $ "================================================"
     ex <- doesFileExist path
     cfg <- if not ex
       then mkDefSettings

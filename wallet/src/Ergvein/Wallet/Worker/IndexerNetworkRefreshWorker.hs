@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Ergvein.Wallet.Worker.IndexerNetworkRefreshWorker
   ( indexerNetworkRefreshWorker
+  , tmi
   , getAll
   ) where
 
@@ -24,7 +25,10 @@ import Network.DNS.Lookup
 import Network.DNS.Types
 import Network.DNS.Resolver
 import Network.Socket
+import System.Random.Shuffle
 import Data.IP
+import Data.Attoparsec.ByteString
+import Data.Attoparsec.Binary
 
 import Data.Set (Set)
 import Data.Map.Strict (Map)
@@ -34,6 +38,7 @@ import qualified Data.List          as L
 import qualified Data.Map.Strict    as Map
 import qualified Data.Set           as Set
 import qualified Data.Text          as T
+import qualified Data.Vector as V
 
 infoWorkerInterval :: NominalDiffTime
 infoWorkerInterval = 60
@@ -42,6 +47,50 @@ indexersCountE :: MonadIndexClient t m =>  m (Event t Int)
 indexersCountE = do
   indexersD <- externalRefDynamic =<< getActiveConnsRef
   pure $ updated $ length . Map.elems <$> indexersD
+
+
+tmi ::(MonadIndexClient t m, MonadHasSettings t m) => m ()
+tmi = do
+  goE <- void <$> tickLossyFromPostBuildTime 4
+  activeUrlsRef <- getActiveConnsRef
+  goE' <- performEvent $ ffor goE $ const $ do
+    currentNetworkInfoMap <- readExternalRef activeUrlsRef
+    let l = length $ Map.toList currentNetworkInfoMap
+    pure $ l < 16
+
+  respE <- requestRandomIndexer $ MPeerRequest PeerRequest <$ goE'
+
+  let respE' = fforMaybe respE $ (\(_, msg) -> case msg of
+                MPeerResponse PeerResponse {..} | not (V.null peerResponseAddresses) -> Just peerResponseAddresses
+                _-> Nothing)
+  
+  respE'' <- performEvent $ ffor respE' $ (\ idxs -> liftIO $ convertA . head <$> (shuffleM  $ V.toList idxs))
+
+  activateURL respE''
+          --r <- <$> liftIO $ shuffleM  $ V.toList peerResponseAddresses
+
+  pure ()
+
+convertA Address{..} = case addressType of
+    IPV4 -> let
+      port = (fromInteger $ toInteger addressPort)
+      ip  =  fromRight (error "address") $ parseOnly anyWord32be addressAddress
+      in SockAddrInet port ip
+    IPV6 -> let
+      port = (fromInteger $ toInteger addressPort)
+      ip  =  fromRight (error "address") $ parseOnly ((,,,) <$> anyWord32be <*> anyWord32be <*> anyWord32be <*> anyWord32be) addressAddress
+      in SockAddrInet6 port 0 ip 0
+
+discWork :: MonadIndexClient t m => m ()
+discWork = do
+  countE <- indexersCountE
+  let countE' = () <$ ffilter (< 20) countE
+  tE     <- void <$> tickLossyFromPostBuildTime infoWorkerInterval
+  let goE = leftmost [countE', tE]
+  respE <- requestRandomIndexer $ MPeerRequest PeerRequest <$ goE
+  performFork_ $ ffor respE $ (\(_, msg) -> do
+    pure ())
+  pure ()
 
 dnsList :: [Domain]
 dnsList = ["seed.cypra.io"]
