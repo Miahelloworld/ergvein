@@ -225,7 +225,8 @@ library
         cpp-options: -DANDROID
         build-depends:
             android-activity -any,
-            ergvein-wallet-android -any
+            ergvein-wallet-android -any,
+            reflex-android-notifications -any
     else
         build-depends:
             ergvein-wallet-desktop -any

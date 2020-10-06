@@ -29,6 +29,7 @@ let
       ergvein-wallet-version = ./wallet-version;
       ergvein-website = ./ergvein-website;
       golomb-rice = ./golomb-rice;
+      reflex-android-notifications = ./reflex-android-notifications;
       reflex-dom-canvas = ./reflex-dom-canvas;
       reflex-dom-retractable = ./retractable;
       reflex-external-ref = ./reflex-external-ref;

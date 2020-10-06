@@ -37,6 +37,7 @@ in (self: super: let
     dontHaddock ( self.callCabal2nix name (ingnoreGarbage path) args ));
   isAndroid = self.ghc.stdenv.targetPlatform.isAndroid;
   walletOpts = if isAndroid then "-fandroid --no-haddock" else "--no-haddock";
+  notifOpts = if isAndroid then "--no-haddock" else "-fdisable-android --no-haddock";
   dontProfile = drv: disableCabalFlag drv "profile-reflex";
   in {
     # Internal
@@ -60,6 +61,7 @@ in (self: super: let
     ergvein-wallet-version = ingnoreGarbage super.ergvein-wallet-version;
     ergo-api = lib.dontCheck (ingnoreGarbage super.ergo-api);
     golomb-rice = ingnoreGarbage super.golomb-rice;
+    reflex-android-notifications = ingnoreGarbage (super.callCabal2nixWithOptions "reflex-android-notifications" ./reflex-android-notifications notifOpts {});
     reflex-dom-retractable = ingnoreGarbage super.reflex-dom-retractable;
     reflex-external-ref = ingnoreGarbage super.reflex-external-ref;
     reflex-localize = ingnoreGarbage super.reflex-localize;
