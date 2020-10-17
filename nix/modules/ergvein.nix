@@ -8,6 +8,7 @@ in {
   ##### Depedendant services
   imports = [
     ../service/bitcoin.nix
+    ../service/bitcoin-regtest.nix
     ../service/ergvein-indexer.nix
   ];
 
@@ -26,6 +27,13 @@ in {
         default = false;
         description = ''
           Start in testnet mode. Uses different data dir.
+        '';
+      };
+      regtest = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Start in regtest mode. Uses different data dir.
         '';
       };
       externalAddress = mkOption {
@@ -47,6 +55,14 @@ in {
 
   ##### implementation
   config = mkIf cfg.enable { # only apply the following settings if enabled
+    assertions = [
+      {
+        assertion = !cfg.testnet || !cfg.regtest;
+        message = ''
+          Either regtest or testnet is allowed for services.ergvein!
+        '';
+      }
+    ];
     nixpkgs.overlays = [
       (import ../overlay.nix)
     ];
@@ -55,6 +71,11 @@ in {
         enable = true;
         testnet = cfg.testnet;
         nodePort = 8332;
+        package = with pkgs; pkgs.callPackage ../pkgs/bitcoin-node.nix { withGui = false; };
+      };
+      bitcoin-regtest = {
+        enable = cfg.regtest;
+        nodePort = 19010;
         package = with pkgs; pkgs.callPackage ../pkgs/bitcoin-node.nix { withGui = false; };
       };
       ergvein-indexer = {
