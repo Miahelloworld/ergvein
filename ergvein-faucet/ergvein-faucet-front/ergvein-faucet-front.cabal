@@ -1,0 +1,89 @@
+name:                ergvein-faucet-front
+version:             1.0.0.0
+synopsis:            Frontend code that is compiled with GHCJS.
+description:         See README.md
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:
+    Ergvein.Faucet.Frontend
+    Ergvein.Faucet.Frontend.Client
+    Ergvein.Faucet.Frontend.Elements
+    Ergvein.Faucet.Frontend.Inputs
+    Ergvein.Faucet.Frontend.Monad
+    Ergvein.Faucet.Frontend.Style
+    Ergvein.Faucet.Frontend.Style.TH
+  build-depends:
+      base
+    , ergvein-faucet-shared
+    , bytestring        >= 0.10     && < 0.11
+    , clay              >= 0.13     && < 0.14
+    , data-default
+    , file-embed        >= 0.0      && < 0.1
+    , reflex            >= 0.6      && < 0.7
+    , reflex-dom        >= 0.6      && < 0.7
+    , servant           >= 0.16     && < 0.17
+    , servant-reflex    >= 0.2      && < 0.4
+    , text              >= 1.2      && < 1.3
+    , time              >= 1.6      && < 1.9
+  default-language:    Haskell2010
+  default-extensions:
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveGeneric
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    RecursiveDo
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+
+executable ergvein-faucet-front
+  hs-source-dirs:
+      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , reflex
+    , reflex-dom
+    , ergvein-faucet-front
+  default-language:    Haskell2010
+  default-extensions:
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveGeneric
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators

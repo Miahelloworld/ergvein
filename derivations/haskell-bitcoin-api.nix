@@ -9,10 +9,11 @@ mkDerivation {
   doCheck = false;
   src = fetchgit {
     url = "https://github.com/hexresearch/haskell-bitcoin-api";
-    sha256 = "0iir22qjizpbi9axmqnm3zhjjrkpvlk472m41vyk3bajjx7aj5n6";
-    rev = "eeafca3112c072f9ff06338fc010ae2229efb6b1";
+    sha256 = "1xl920mcqkz6h20xh3w2xf3igh743c6c2d5sykfar5m8yc9f3h6i";
+    rev = "0410140fee69ad42fe2467f453137badf9e26244";
     fetchSubmodules = true;
   };
+  /* src = ../../haskell-bitcoin-api; */
   enableSeparateDataOutput = true;
   libraryHaskellDepends = [
     aeson base base58string binary bitcoin-block bitcoin-script

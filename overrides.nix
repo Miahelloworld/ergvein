@@ -31,6 +31,21 @@ let
       export VERSION_TAG=${versionTag}
     '';
   });
+  optimizeGhcjs = drv: overrideCabal drv (drv: { buildFlags = (drv.buildFlags or []) ++ ["--ghcjs-option=-O2 " "--ghcjs-option=-dedupe"]; });
+  runClosureCompiler = drv: lib.overrideCabal drv (drv: {
+    postFixup = ''
+      cd $out/bin/ergvein-faucet-front.jsexe
+      ${pkgs.closurecompiler}/bin/closure-compiler all.js --compilation_level=ADVANCED_OPTIMIZATIONS \
+        --externs=all.js.externs \
+        --externs=${./ergvein-faucet/ergvein-faucet-front/statics}/js/runmain.js \
+        --jscomp_off=duplicate \
+        --jscomp_off=undefinedVars \
+        --jscomp_off=externsValidation \
+        > all.min.js
+        ${pkgs.zopfli}/bin/zopfli -i1000 all.min.js
+        '';
+  });
+  ghcsOverride = drv: runClosureCompiler (optimizeGhcjs drv);
 in (self: super: let
   # Internal packages (depends on production or dev environment)
   callInternal = name: path: args: (
@@ -45,10 +60,11 @@ in (self: super: let
     ergvein-checkpoint-generator = ingnoreGarbage super.ergvein-checkpoint-generator;
     ergvein-common = ingnoreGarbage super.ergvein-common;
     ergvein-crypto = ingnoreGarbage super.ergvein-crypto;
+    ergvein-faucet-front = ghcsOverride super.ergvein-faucet-front;
     ergvein-index-api = ingnoreGarbage super.ergvein-index-api;
+    ergvein-index-client = ingnoreGarbage super.ergvein-index-client;
     ergvein-index-protocol = ingnoreGarbage super.ergvein-index-protocol;
     ergvein-index-protocol-client = ingnoreGarbage super.ergvein-index-protocol-client;
-    ergvein-index-client = ingnoreGarbage super.ergvein-index-client;
     ergvein-index-server = ingnoreGarbage super.ergvein-index-server;
     ergvein-interface-ergo = ingnoreGarbage super.ergvein-interface-ergo;
     ergvein-wallet = addVersions (ingnoreGarbage (super.callCabal2nixWithOptions "ergvein-wallet" ./wallet walletOpts {}));
@@ -80,6 +96,7 @@ in (self: super: let
     hp2any-core = self.callPackage ./derivations/hp2any-core.nix {};
     hp2any-graph = self.callPackage ./derivations/hp2any-graph.nix {};
     immortal-worker = self.callPackage ./derivations/immortal-worker.nix {};
+    include-file = self.callPackage ./derivations/include-file.nix {};
     iproute = self.callPackage ./derivations/iproute.nix {};
     lmdb = self.callPackage ./derivations/haskell-lmdb.nix {};
     parseargs = lib.dontCheck super.parseargs;
@@ -88,6 +105,8 @@ in (self: super: let
     reflex = enableCabalFlag super.reflex "O2";
     reflex-dom-core = dontProfile (lib.dontCheck (super.reflex-dom-core));
     secp256k1-haskell = self.callPackage ./derivations/secp256k1-haskell.nix {};
+    servant-blaze = self.callPackage ./derivations/servant-blaze.nix {};
+    servant-reflex = self.callPackage ./derivations/servant-reflex.nix {};
     stm-hamt = self.callPackage ./derivations/stm-hamt.nix {};
     tls = lib.dontCheck super.tls;
     wide-word = lib.dontCheck (self.callPackage ./derivations/wide-word.nix { });

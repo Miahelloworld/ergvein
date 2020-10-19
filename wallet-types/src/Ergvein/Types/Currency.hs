@@ -40,14 +40,13 @@ import Data.Flat
 import Data.Maybe (fromMaybe)
 import Data.Ratio
 import Data.Serialize (Serialize)
-import Data.String
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text)
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.Version
 import Data.Word
 import Ergvein.Aeson
 import Text.Printf
+import Web.HttpApiData
 
 import qualified Data.Text as T
 
@@ -58,6 +57,15 @@ $(deriveJSON aesonOptions ''Currency)
 
 instance ToJSONKey Currency where
 instance FromJSONKey Currency where
+
+instance FromHttpApiData Currency where
+  parseUrlPiece t = case (T.toLower . T.strip) t of
+    "btc" -> Right BTC
+    "ergo" -> Right ERGO
+    _ -> Left $ "Unknown Currency: " <> t
+
+instance ToHttpApiData Currency where
+  toQueryParam = T.toLower . T.pack . show
 
 -- | All supported currencies
 allCurrencies :: [Currency]
@@ -70,6 +78,16 @@ $(deriveJSON aesonOptions ''Fiat)
 
 instance ToJSONKey Fiat where
 instance FromJSONKey Fiat where
+
+instance FromHttpApiData Fiat where
+  parseUrlPiece t = case (T.toLower . T.strip) t of
+    "usd" -> Right USD
+    "eur" -> Right EUR
+    "rub" -> Right RUB
+    _ -> Left $ "Unknown Fiat: " <> t
+
+instance ToHttpApiData Fiat where
+  toQueryParam = T.toLower . T.pack . show
 
 -- | All supported currencies
 allFiats :: [Fiat]
@@ -192,8 +210,8 @@ currencyGenesisTime c = case c of
 -- | Average duration between blocks
 currencyBlockDuration :: Currency -> NominalDiffTime
 currencyBlockDuration c = case c of
-  BTC -> fromIntegral 600
-  ERGO -> fromIntegral 120
+  BTC -> fromIntegral (600 :: Int)
+  ERGO -> fromIntegral (120 :: Int)
 
 -- | Approx time of block
 currencyBlockTime :: Currency -> Int -> UTCTime
@@ -225,13 +243,13 @@ moneyToRationalUnit (Money cur amount) units = fromIntegral amount % (10 ^ curre
 moneyFromRational :: Currency -> Rational -> Money
 moneyFromRational cur amount = Money cur val
   where
-    val = fromIntegral . round $ amount * (10 ^ currencyResolution cur)
+    val = fromIntegral (round $ amount * (10 ^ currencyResolution cur) :: Int)
 {-# INLINE moneyFromRational #-}
 
-moneyFromRationalUnit :: Currency -> Units-> Rational -> Money
+moneyFromRationalUnit :: Currency -> Units -> Rational -> Money
 moneyFromRationalUnit cur units amount = Money cur val
   where
-    val = fromIntegral . round $ amount * (10 ^ currencyResolutionUnit cur units)
+    val = fromIntegral (round $ amount * (10 ^ currencyResolutionUnit cur units) :: Int)
 {-# INLINE moneyFromRationalUnit #-}
 
 -- | Print amount of cryptocurrency

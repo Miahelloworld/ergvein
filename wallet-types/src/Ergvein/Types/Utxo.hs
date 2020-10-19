@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Types.Utxo
   (
     EgvUtxoStatus(..)
@@ -17,12 +18,10 @@ import Network.Haskoin.Script
 import Network.Haskoin.Transaction
 
 import Ergvein.Aeson
-import Ergvein.Types.Currency
 import Ergvein.Types.Keys
 import Ergvein.Types.Transaction
 
 import qualified Data.Map.Strict as M
-import qualified Data.Set as S
 
 data EgvUtxoStatus
   = EUtxoConfirmed
@@ -79,6 +78,3 @@ reconfirmBtxUtxoSetPure bh bs = flip M.mapMaybe bs $ \meta -> case utxoMeta'stat
   EUtxoReceiving mh -> case mh of
     Nothing -> Just $ meta {utxoMeta'status = EUtxoReceiving $ Just bh}
     Just bh0 -> if bh - bh0 >= staleGap - 1 then Nothing else Just meta
-  where
-    keys = M.keys bs
-    foo b ta f = foldl' f b ta

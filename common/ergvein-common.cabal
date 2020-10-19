@@ -25,4 +25,6 @@ library
     , safe
     , template-haskell
     , text
+    , time
+    , unbounded-delays
   default-language:    Haskell2010

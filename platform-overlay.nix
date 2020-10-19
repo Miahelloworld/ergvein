@@ -7,6 +7,7 @@
       allowBroken = true;
       oraclejdk.accept_license = true;
       allowUnfree = true;
+      allowUnsupportedSystem = true;
     };
     enableLibraryProfiling = profile;
 }

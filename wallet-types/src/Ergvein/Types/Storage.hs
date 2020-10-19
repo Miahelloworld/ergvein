@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Types.Storage where
 
 import Control.Lens (makeLenses, (&), (%~))

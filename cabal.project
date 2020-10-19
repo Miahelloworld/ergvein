@@ -5,16 +5,21 @@ packages:
   ./crypto
   ./data-merkle-tree
   ./ergo-api
+  ./ergvein-faucet/ergvein-faucet-back
+  ./ergvein-faucet/ergvein-faucet-client
+  ./ergvein-faucet/ergvein-faucet-shared
+  ./ergvein-website
   ./golomb-rice
   ./index-api
+  ./index-client
   ./index-protocol
   ./index-protocol-client
-  ./index-client
   ./index-server
   ./interfaces/ergo
   ./reflex-external-ref
   ./reflex-localize
   ./retractable
+  ./ui-playground
   ./wallet
   ./wallet-android
   ./wallet-desktop
@@ -23,5 +28,3 @@ packages:
   ./wallet-types
   ./wallet-version
   ./x509-android
-  ./ergvein-website
-  ./ui-playground

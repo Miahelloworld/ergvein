@@ -1,0 +1,9 @@
+host: 127.0.0.1
+port: 8080
+statics: ../ergvein-faucet-front/statics
+blockPeriod: 300
+node:
+ host: 127.0.0.1
+ port: 19010
+ user: bitcoin
+ password: "AeNungaengohpeeG4eX5"

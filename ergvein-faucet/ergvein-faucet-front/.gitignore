@@ -1,0 +1,4 @@
+dist/
+dist-newstyle/
+statics/main.js
+statics/main.min.js

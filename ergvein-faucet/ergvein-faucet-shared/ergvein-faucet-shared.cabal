@@ -1,0 +1,45 @@
+name:                ergvein-faucet-shared
+version:             1.0.0.0
+synopsis:            Shared code between back and front.
+description:         See README.md
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:
+    Ergvein.Faucet.Aeson
+    Ergvein.Faucet.API
+    Ergvein.Faucet.Shared
+  build-depends:
+      base
+    , aeson             >= 1.0          && < 1.5
+    , bytestring        >= 0.10         && < 0.12
+    , http-api-data     >= 0.4          && < 0.5
+    , servant           >= 0.16         && < 0.17
+    , text              >= 1.2          && < 1.3
+    , time              >= 1.6          && < 1.9
+  default-language:    Haskell2010
+  default-extensions:
+    BangPatterns
+    ConstraintKinds
+    DataKinds
+    DeriveDataTypeable
+    DeriveGeneric
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    LambdaCase
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators

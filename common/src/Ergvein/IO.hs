@@ -1,16 +1,35 @@
 module Ergvein.IO(
-    readFileSafe
+    periodic
+  , sleep
+  , toMicroseconds
+  , readFileSafe
   , readLazyByteStringSafe
   , readStrictByteStringSafe
 ) where
 
-import Data.Text (Text)
-import System.Directory
 import Control.Exception
+import Control.Concurrent.Thread.Delay
+import Control.Monad.Fix (fix)
+import Control.Monad.IO.Class
+import Data.Text (Text)
+import Data.Time (NominalDiffTime)
+import System.Directory
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Text.IO as T
+
+{-# NOINLINE periodic #-}
+periodic :: MonadIO m => NominalDiffTime -> m () -> m ()
+periodic time proc = fix $ \next -> proc >> sleep time >> next
+
+-- | Stop the thread for some time in seconds.
+sleep :: MonadIO m => NominalDiffTime -> m ()
+sleep dt = liftIO . delay $ toMicroseconds dt
+
+-- | Convert time to microseconds
+toMicroseconds :: NominalDiffTime -> Integer
+toMicroseconds t = ceiling $ toRational t * 1000000
 
 readFileSafe :: FilePath -> IO (Maybe Text)
 readFileSafe file = do

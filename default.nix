@@ -8,6 +8,7 @@ let
    version = import ./android-version.nix;
    versionTag = version.code;
    project = reflex-platform.project ({ pkgs, ... }: {
+    withHoogle = false;
     packages = {
       cbitstream = ./cbitstream;
       data-merkle-tree = ./data-merkle-tree;
@@ -15,10 +16,14 @@ let
       ergvein-checkpoint-generator = ./checkpoint-generator;
       ergvein-common = ./common;
       ergvein-crypto = ./crypto;
+      ergvein-faucet-back = ./ergvein-faucet/ergvein-faucet-back;
+      ergvein-faucet-client = ./ergvein-faucet/ergvein-faucet-client;
+      ergvein-faucet-front = ./ergvein-faucet/ergvein-faucet-front;
+      ergvein-faucet-shared = ./ergvein-faucet/ergvein-faucet-shared;
       ergvein-index-api = ./index-api;
+      ergvein-index-client = ./index-client;
       ergvein-index-protocol = ./index-protocol;
       ergvein-index-protocol-client = ./index-protocol-client;
-      ergvein-index-client = ./index-client;
       ergvein-index-server = ./index-server;
       ergvein-interface-ergo = ./interfaces/ergo;
       ergvein-wallet = ./wallet;
@@ -45,10 +50,14 @@ let
         "ergvein-checkpoint-generator"
         "ergvein-common"
         "ergvein-crypto"
+        "ergvein-faucet-back"
+        "ergvein-faucet-client"
+        "ergvein-faucet-front"
+        "ergvein-faucet-shared"
         "ergvein-index-api"
-        "ergvein-index-protocol"
-        "ergvein-index-protocol-client"
         "ergvein-index-client"
+        "ergvein-index-protocol-client"
+        "ergvein-index-protocol"
         "ergvein-index-server"
         "ergvein-interface-ergo"
         "ergvein-wallet-desktop"
@@ -63,6 +72,10 @@ let
         "reflex-external-ref"
         "reflex-localize"
         "ui-playground"
+      ];
+      ghcjs = [
+        "ergvein-faucet-front"
+        "ergvein-faucet-shared"
       ];
     };
     overrides = import ./overrides.nix { inherit reflex-platform gitHash versionTag; };
