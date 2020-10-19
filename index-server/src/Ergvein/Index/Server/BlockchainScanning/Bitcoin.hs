@@ -12,7 +12,7 @@ import           Data.Serialize
 import           Data.Text(Text)
 import           Data.Time
 import           Data.Word
-import           Network.Bitcoin.Api.Blockchain
+import           Network.Bitcoin.Api.Blockchain as Btc
 import           Network.Bitcoin.Api.Misc
 import           Control.Concurrent.STM.TVar
 
@@ -87,7 +87,7 @@ actualHeight = fromIntegral <$> nodeRpcCall getBlockCount
 blockInfo :: (BitcoinApiMonad m,  HasBitcoinNodeNetwork m, HasFiltersDB m, MonadLogger m, MonadBaseControl IO m)
   => BlockHeight -> m BlockInfo
 blockInfo blockHeightToScan =  do
-  blockHash <- nodeRpcCall $ (`getBlockHash` fromIntegral blockHeightToScan)
+  blockHash <- nodeRpcCall $ (`Btc.getBlockHash` fromIntegral blockHeightToScan)
   currentNetwork <- currentBitcoinNetwork
   conScheme <- getBtcConnectionScheme
   parsedBlock <- case conScheme of

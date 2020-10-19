@@ -147,7 +147,7 @@ rollbackItemBuilder (RollbackRecItem sp m prevHash prevH) =
      word32LE (fromIntegral $ length sp)
   <> mconcat (txHashBuilder <$> sp)
   <> hash2Word32MapBuilder m
-  <> buildBSS prevHash
+  <> buildBSS (getBlockHash prevHash)
   <> word64LE prevH
 
 rollbackItemParser :: Currency -> Parser RollbackRecItem
@@ -157,7 +157,7 @@ rollbackItemParser cur = do
   m <- hash2Word32MapParser cur
   prevHash <- parseBSS
   prevH <- anyWord64le
-  pure $ RollbackRecItem sp m prevHash prevH
+  pure $ RollbackRecItem sp m (BlockHash prevHash) prevH
 
 txHashParser :: Currency -> Parser TxHash
 txHashParser cur = fmap (TxHash . BSS.toShort) $ Parse.take $ getTxHashLength cur

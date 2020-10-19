@@ -46,6 +46,8 @@ arbitraryBSS32 = do
 
 instance Arbitrary TxHash where
   arbitrary = TxHash <$> arbitraryBSS32
+instance Arbitrary BlockHash where
+  arbitrary = BlockHash <$> arbitraryBSS32
 instance Arbitrary ScannedHeightRec where
   arbitrary = ScannedHeightRec <$> arbitrary
 instance Arbitrary TxRecBytes where

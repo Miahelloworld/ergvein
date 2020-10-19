@@ -11,7 +11,7 @@ module Ergvein.Types.Transaction (
     , egvTxCurrency
     , TxId
     , BlockHeight
-    , BlockHash
+    , BlockHash(..)
     , TxBlockIndex
     , MerkleSum
     , TxMerkleProof
@@ -140,7 +140,25 @@ type TxId = TxHash
 type BlockHeight = Word64
 
 -- | Hash of block (usually header only) that identifies block.
-type BlockHash = ShortByteString
+newtype BlockHash = BlockHash { getBlockHash :: ShortByteString }
+  deriving (Eq, Ord, Hashable, Generic, Flat, Serialize, NFData)
+
+instance Show BlockHash where
+    showsPrec _ = shows . encodeHex . BSS.fromShort . getBlockHash
+
+instance Read BlockHash where
+    readPrec = do
+        R.String str <- lexP
+        maybe pfail return $ BlockHash . BSS.toShort <$> decodeHex (cs str)
+
+instance FromJSON BlockHash where
+  parseJSON = withText "BlockHash" $
+    either (fail "Failed to parse BlockHash") (pure . BlockHash . BSS.toShort) . hex2bsTE
+  {-# INLINE parseJSON #-}
+
+instance ToJSON BlockHash where
+  toJSON = A.String . bs2Hex . BSS.fromShort . getBlockHash
+  {-# INLINE toJSON #-}
 
 -- | Index of the transaction in block
 type TxBlockIndex = Word
@@ -204,5 +222,5 @@ data EgvTxMeta = EgvTxMeta {
 $(deriveJSON (aesonOptionsStripPrefix "etxMeta") ''EgvTxMeta)
 
 egvBlockHashToHk :: BlockHash -> HB.BlockHash
-egvBlockHashToHk bh = fromRight (error $ "Failed to convert bh: " <> show bh) $ runGet S.get (BSS.fromShort bh)
+egvBlockHashToHk bh = fromRight (error $ "Failed to convert bh: " <> show bh) $ runGet S.get (BSS.fromShort . getBlockHash $ bh)
 {-# INLINE egvBlockHashToHk #-}

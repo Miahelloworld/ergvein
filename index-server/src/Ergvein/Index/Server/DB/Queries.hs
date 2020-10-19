@@ -129,7 +129,7 @@ addBlockInfo update = do
   insertRollback targetCurrency $ RollbackRecItem
     (txHash <$> blockContentTxInfos update)
     (spentTxOutputs update)
-    (blockMetaPreviousHeaderBlockHash $ blockInfoMeta update)
+    (BlockHash $ blockMetaPreviousHeaderBlockHash $ blockInfoMeta update)
     (blockMetaBlockHeight (blockInfoMeta update) - 1)
   addBlockMetaInfos targetCurrency [blockInfoMeta update]
   setLastScannedBlock targetCurrency newBlockHash
@@ -220,7 +220,7 @@ performBtcRollback = do
   case Seq.viewr rse of
     Seq.EmptyR -> pure ()
     rest Seq.:> lst -> do
-      setLastScannedBlock cur $ rollbackPrevBlockHash lst
+      setLastScannedBlock cur $ getBlockHash $ rollbackPrevBlockHash lst
       setScannedHeight cur $ rollbackPrevHeight lst
 
   let spentTxIds = fold $ rollbackItemAdded <$> rse
