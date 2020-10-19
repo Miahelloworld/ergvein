@@ -118,7 +118,7 @@ in {
       wants = ["network.target" cfg.passwordFileService];
       script = ''
         export RPC_PASSWORD=$(cat ${cfg.passwordFile} | xargs echo -n)
-        ${cfg.package}/bin/bitcoind -datadir=${cfg.datadir} -conf=/etc/${cfg.configPath} -deprecatedrpc=accounts -fallbackfee=100 -rpcpassword=$RPC_PASSWORD
+        ${cfg.package}/bin/bitcoind -datadir=${cfg.datadir} -conf=/etc/${cfg.configPath} -deprecatedrpc=accounts -fallbackfee=10 -rpcpassword=$RPC_PASSWORD
       '';
       serviceConfig = {
           Restart = "always";
