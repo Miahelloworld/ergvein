@@ -47,7 +47,7 @@ getHeightEndpointImpl cur = fail $ "getHeight unimplemented for " <> show cur
 
 sendToAddressEndpointImpl :: Currency -> SendToAddress -> ServerM Text
 sendToAddressEndpointImpl BTC SendToAddress{..} = runBtcRpc "send address" $ \c -> do
-  tid <- C.sendToAddress c (B58.fromText sendToAddressAddress) (realToFrac sendToAddressAmount)
+  tid <- C.sendToAddress c sendToAddressAddress (realToFrac sendToAddressAmount)
   pure $ HX.toText tid
 sendToAddressEndpointImpl cur _ = fail $ "mineBlocks unimplemented for " <> show cur
 

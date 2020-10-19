@@ -9,8 +9,8 @@ mkDerivation {
   doCheck = false;
   src = fetchgit {
     url = "https://github.com/hexresearch/haskell-bitcoin-api";
-    sha256 = "1xl920mcqkz6h20xh3w2xf3igh743c6c2d5sykfar5m8yc9f3h6i";
-    rev = "0410140fee69ad42fe2467f453137badf9e26244";
+    sha256 = "17bys057871bagx01l8ydx30fprjnyj5l4nxw75zj3kqda8m2jgk";
+    rev = "b43daa284c712236f2b3260aaf2205e7e2af0852";
     fetchSubmodules = true;
   };
   /* src = ../../haskell-bitcoin-api; */
