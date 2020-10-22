@@ -126,7 +126,7 @@ messageParser MVersionType = do
     , versionScanBlocks = versionBlocks
     }
 
-messageParser MVersionACKType = MVersionACK VersionACK <$ word8 0
+messageParser MVersionACKType = pure $ MVersionACK VersionACK
 
 messageParser MFiltersRequestType = do
   currency <- currencyCodeParser
