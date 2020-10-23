@@ -8,6 +8,7 @@ module Ergvein.Wallet.Page.Settings.Network
 
 import Control.Lens
 import Data.Functor.Misc (Const2(..))
+import Data.Maybe
 import Reflex.Dom
 import Reflex.ExternalRef
 
@@ -66,6 +67,7 @@ networkSettingsPageUnauth = wrapperSimple False $ do
 
 addUrlWidget :: forall t m . MonadFrontBase t m => Dynamic t Bool -> m (Event t NamedSockAddr)
 addUrlWidget showD = fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b -> if not b then pure never else do
+  net <- getNetworkType
   murlE <- divClass "mt-3" $ do
     textD <- fmap _inputElement_value $ inputElement $ def
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~ ("type" =: "text")
@@ -73,7 +75,7 @@ addUrlWidget showD = fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b -> if not 
     rs <- mkResolvSeed
     performFork $ ffor goE $ const $ do
       t <- sampleDyn textD
-      parseSingleSockAddr rs t
+      parseSingleSockAddr net rs t
   void $ widgetHold (pure ()) $ ffor murlE $ \case
     Nothing -> divClass "form-field-errors" $ localizedText NPSParseError
     _ -> pure ()
@@ -81,18 +83,20 @@ addUrlWidget showD = fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b -> if not 
 
 activePageWidget :: forall t m . MonadFrontBase t m => m ()
 activePageWidget = mdo
+  net <- getNetworkType
   connsD  <- externalRefDynamic =<< getActiveConnsRef
   addrsD  <- (fmap . fmap) S.toList $ externalRefDynamic =<< getActiveAddrsRef
   showD <- holdDyn False $ leftmost [False <$ hideE, tglE]
   let valsD = (,) <$> connsD <*> addrsD
   void $ widgetHoldDyn $ ffor valsD $ \(conmap, urls) ->
     flip traverse urls $ \sa -> renderActive sa refrE $ M.lookup (namedAddrSock sa) conmap
-  hideE <- activateURL =<< addUrlWidget showD
+  hideE <- activateURL net =<< addUrlWidget showD
   (refrE, tglE) <- divClass "network-wrapper mt-3" $ divClass "net-btns-3" $ do
     refrE' <- buttonClass "button button-outline m-0" NSSRefresh
     restoreE <- buttonClass "button button-outline m-0" NSSRestoreUrls
     rs <- mkResolvSeed
-    void $ activateURLList =<< performFork (parseSockAddrs rs defaultIndexers <$ restoreE)
+    let defValues = fromMaybe [] $ M.lookup net defaultIndexers
+    void $ activateURLList net =<< performFork (parseSockAddrs net rs defValues <$ restoreE)
     tglE' <- fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b ->
       fmap (not b <$) $ buttonClass "button button-outline m-0" $ if b then NSSClose else NSSAddUrl
     pure (refrE', tglE')
@@ -104,6 +108,7 @@ renderActive :: MonadFrontBase t m
   -> (Maybe (IndexerConnection t))
   -> m ()
 renderActive nsa refrE mconn = mdo
+  net <- getNetworkType
   tglD <- holdDyn False tglE
   let editBtn = fmap switchDyn $ widgetHoldDyn $ ffor tglD $ \b -> fmap (not b <$)
         $ buttonClass "button button-outline network-edit-btn mt-a mb-a ml-a"
@@ -118,7 +123,6 @@ renderActive nsa refrE mconn = mdo
       descrOption NSSOffline
       pure e
     Just conn -> do
-      net <- getNetworkType
       let clsUnauthD = ffor (indexConIsUp conn) $ \up -> if up then onclass else offclass
       let heightD = fmap (M.lookup $ coinByNetwork Bitcoin net) $ indexerConHeight conn
       clsD <- fmap join $ liftAuth (pure clsUnauthD) $ do
@@ -143,8 +147,8 @@ renderActive nsa refrE mconn = mdo
   void $ widgetHoldDyn $ ffor tglD $ \b -> if not b
     then pure ()
     else divClass "network-wrapper mt-2" $ do
-      void $ deactivateURL . (nsa <$) =<< buttonClass "button button-outline mt-1 ml-1" NSSDisable
-      void $ forgetURL . (nsa <$) =<< buttonClass "button button-outline mt-1 ml-1" NSSForget
+      void $ deactivateURL net . (nsa <$) =<< buttonClass "button button-outline mt-1 ml-1" NSSDisable
+      void $ forgetURL net . (nsa <$) =<< buttonClass "button button-outline mt-1 ml-1" NSSForget
   where
     offclass    = [("class", "mb-a mt-a indexer-offline")]
     onclass     = [("class", "mb-a mt-a indexer-online")]
@@ -152,9 +156,10 @@ renderActive nsa refrE mconn = mdo
 
 inactivePageWidget :: forall t m . MonadFrontBase t m => m ()
 inactivePageWidget = mdo
+  net <- getNetworkType
   addrsD <- externalRefDynamic =<< getInactiveAddrsRef
   showD <- holdDyn False $ leftmost [False <$ hideE, tglE]
-  hideE <- deactivateURL =<< addUrlWidget showD
+  hideE <- deactivateURL net =<< addUrlWidget showD
   let addrsMapD = (M.fromList . fmap (,()) . S.toList) <$> addrsD
   void $ listWithKey addrsMapD $ \addr _ -> renderInactive pingAllE addr
   (pingAllE, tglE) <- divClass "network-wrapper mt-1" $ divClass "net-btns-2" $ do
@@ -185,9 +190,9 @@ renderInactive initPingE nsa = mdo
   pingE <- fmap switchDyn $ widgetHoldDyn $ ffor tglD $ \b -> if not b
     then pure never
     else divClass "network-wrapper mt-1" $ divClass "net-btns-3" $ do
-      void $ activateURL . (nsa <$) =<< outlineButton NSSEnable
+      void $ activateURL net . (nsa <$) =<< outlineButton NSSEnable
       pingE' <- outlineButton NSSPing
-      void $ forgetURL . (nsa <$) =<< outlineButton NSSForget
+      void $ forgetURL net . (nsa <$) =<< outlineButton NSSForget
       pure pingE'
   pure ()
   where

@@ -35,6 +35,7 @@ import Reflex.ExternalRef
 
 import Ergvein.Index.Protocol.Types (Message(..))
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Types.Transaction
 import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Monad.Prim
@@ -88,8 +89,8 @@ getInactiveUrlsD :: MonadIndexClient t m => m (Dynamic t (Set NamedSockAddr))
 getInactiveUrlsD = externalRefDynamic =<< getInactiveAddrsRef
 
 -- | Activate an URL
-activateURL :: (MonadIndexClient t m, MonadHasSettings t m) => Event t NamedSockAddr -> m (Event t ())
-activateURL addrE = do
+activateURL :: (MonadIndexClient t m, MonadHasSettings t m) => NetworkType -> Event t NamedSockAddr -> m (Event t ())
+activateURL net addrE = do
   (_, f)    <- getActivationEF
   iaRef     <- getInactiveAddrsRef
   acrhRef   <- getArchivedAddrsRef
@@ -105,17 +106,17 @@ activateURL addrE = do
     f [url]
     s <- modifyExternalRef setRef $ \s -> let
       s' = s {
-          settingsActiveAddrs       = namedAddrName <$> acs
-        , settingsDeactivatedAddrs  = namedAddrName <$> ias
-        , settingsArchivedAddrs     = namedAddrName <$> ars
+          settingsActiveAddrs       = M.insert net (namedAddrName <$> acs) $ settingsActiveAddrs s
+        , settingsDeactivatedAddrs  = M.insert net (namedAddrName <$> ias) $ settingsDeactivatedAddrs s
+        , settingsArchivedAddrs     = M.insert net (namedAddrName <$> ars) $ settingsArchivedAddrs s
         }
       in (s', s')
     storeSettings s
     fire ()
 
 -- | Activate an URL
-activateURLList :: (MonadIndexClient t m, MonadHasSettings t m) => Event t [NamedSockAddr] -> m (Event t ())
-activateURLList addrE = do
+activateURLList :: (MonadIndexClient t m, MonadHasSettings t m) => NetworkType -> Event t [NamedSockAddr] -> m (Event t ())
+activateURLList net addrE = do
   (_, f)    <- getActivationEF
   iaRef     <- getInactiveAddrsRef
   acrhRef   <- getArchivedAddrsRef
@@ -132,17 +133,17 @@ activateURLList addrE = do
     f urls
     s <- modifyExternalRef setRef $ \s -> let
       s' = s {
-          settingsActiveAddrs      = namedAddrName <$> acs
-        , settingsDeactivatedAddrs = namedAddrName <$> ias
-        , settingsArchivedAddrs    = namedAddrName <$> ars
+          settingsActiveAddrs      = M.insert net (namedAddrName <$> acs) $ settingsActiveAddrs s
+        , settingsDeactivatedAddrs = M.insert net (namedAddrName <$> ias) $ settingsDeactivatedAddrs s
+        , settingsArchivedAddrs    = M.insert net (namedAddrName <$> ars) $ settingsArchivedAddrs s
         }
       in (s', s')
     storeSettings s
     fire ()
 
 -- | Deactivate an URL
-deactivateURL :: (MonadIndexClient t m, MonadHasSettings t m) => Event t NamedSockAddr -> m (Event t ())
-deactivateURL addrE = do
+deactivateURL :: (MonadIndexClient t m, MonadHasSettings t m) => NetworkType -> Event t NamedSockAddr -> m (Event t ())
+deactivateURL net addrE = do
   req       <- getIndexReqFire
   iaRef     <- getInactiveAddrsRef
   setRef    <- getSettingsRef
@@ -156,16 +157,16 @@ deactivateURL addrE = do
     req $ M.singleton (namedAddrSock url) IndexerClose
     s <- modifyExternalRef setRef $ \s -> let
       s' = s {
-          settingsActiveAddrs  = namedAddrName <$> acs
-        , settingsDeactivatedAddrs = namedAddrName <$> ias
+          settingsActiveAddrs      = M.insert net (namedAddrName <$> acs) $ settingsActiveAddrs      s
+        , settingsDeactivatedAddrs = M.insert net (namedAddrName <$> ias) $ settingsDeactivatedAddrs s
         }
       in (s', s')
     storeSettings s
     fire ()
 
 -- | Forget an url
-forgetURL :: (MonadIndexClient t m, MonadHasSettings t m) => Event t NamedSockAddr -> m (Event t ())
-forgetURL addrE = do
+forgetURL :: (MonadIndexClient t m, MonadHasSettings t m) => NetworkType -> Event t NamedSockAddr -> m (Event t ())
+forgetURL net addrE = do
   req       <- getIndexReqFire
   iaRef     <- getInactiveAddrsRef
   acrhRef   <- getArchivedAddrsRef
@@ -181,9 +182,9 @@ forgetURL addrE = do
     req $ M.singleton (namedAddrSock url) IndexerClose
     s <- modifyExternalRef setRef $ \s -> let
       s' = s {
-          settingsActiveAddrs  = namedAddrName <$> acs
-        , settingsDeactivatedAddrs = namedAddrName <$> ias
-        , settingsArchivedAddrs = namedAddrName <$> ars
+          settingsActiveAddrs      = M.insert net (namedAddrName <$> acs) $ settingsActiveAddrs s
+        , settingsDeactivatedAddrs = M.insert net (namedAddrName <$> ias) $ settingsDeactivatedAddrs s
+        , settingsArchivedAddrs    = M.insert net (namedAddrName <$> ars) $ settingsArchivedAddrs s
         }
       in (s', s')
     storeSettings s

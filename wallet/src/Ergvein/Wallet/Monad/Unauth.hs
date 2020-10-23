@@ -9,6 +9,7 @@ import Control.Concurrent.Chan
 import Control.Monad.Reader
 import Data.IORef
 import Data.Map.Strict (Map)
+import Data.Maybe
 import Data.Text (Text)
 import Data.Time (NominalDiffTime)
 import Network.Socket (SockAddr)
@@ -162,10 +163,11 @@ newEnv settings uiChan = do
   nameSpaces <- newExternalRef []
   -- MonadClient refs
   rs <- runReaderT mkResolvSeed settingsRef
-
-  socadrs         <- parseSockAddrs rs (settingsActiveAddrs settings)
-  urlsArchive     <- newExternalRef . S.fromList =<< parseSockAddrs rs (settingsArchivedAddrs settings)
-  inactiveUrls    <- newExternalRef . S.fromList =<< parseSockAddrs rs (settingsDeactivatedAddrs settings)
+  let net = settingsNetwork settings
+      netLookup = fromMaybe [] . M.lookup net
+  socadrs         <- parseSockAddrs net rs (netLookup $ settingsActiveAddrs settings)
+  urlsArchive     <- newExternalRef . S.fromList =<< parseSockAddrs net rs (netLookup $ settingsArchivedAddrs settings)
+  inactiveUrls    <- newExternalRef . S.fromList =<< parseSockAddrs net rs (netLookup $ settingsDeactivatedAddrs settings)
   actvieAddrsRef  <- newExternalRef $ S.fromList socadrs
   indexConmapRef  <- newExternalRef $ M.empty
   timeoutRef      <- newExternalRef $ settingsReqTimeout settings
@@ -174,7 +176,7 @@ newEnv settings uiChan = do
   indexEF <- newTriggerEvent
   let env = UnauthEnv {
           unauth'settings         = settingsRef
-        , unauth'network          = settingsNetwork settings
+        , unauth'network          = net
         , unauth'pauseEF          = (pauseE, pauseFire ())
         , unauth'resumeEF         = (resumeE, resumeFire ())
         , unauth'backEF           = (backE, backFire ())
@@ -198,7 +200,7 @@ newEnv settings uiChan = do
         , unauth'activateIndexEF  = indexEF
         }
   flip runReaderT env $ do
-    indexerNodeController (settingsNetwork settings) socadrs
+    indexerNodeController net socadrs
   pure env
 
 runEnv :: (MonadBaseConstr t m, PlatformNatives, HasVersion)

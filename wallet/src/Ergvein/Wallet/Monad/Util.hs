@@ -32,6 +32,7 @@ import Network.Socket
 import Reflex.ExternalRef
 import Text.Read
 
+import Ergvein.Types.Network
 import Ergvein.Wallet.Log.Types
 import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Monad.Prim
@@ -132,14 +133,14 @@ runOnUiThreadM ma = do
 -- If the address is an IP4 tuple, it is not resolved
 -- If it is not, then try to resolve it with dns lookup with the provided ResolvSeed
 -- direct lookup is used instead of getAddrInfo b.c. the latter fails on Android
-parseSockAddrs :: (MonadIO m, PlatformNatives) => ResolvSeed -> [Text] -> m [NamedSockAddr]
-parseSockAddrs rs urls = liftIO $ do
+parseSockAddrs :: (MonadIO m, PlatformNatives) => NetworkType -> ResolvSeed -> [Text] -> m [NamedSockAddr]
+parseSockAddrs net rs urls = liftIO $ do
   withResolver rs $ \resolver -> fmap catMaybes $ traverse (parseAddr resolver) urls
   where
     parseAddr :: Resolver -> Text -> IO (Maybe NamedSockAddr)
     parseAddr resolver t = do
       let (h, p) = fmap (T.drop 1) $ T.span (/= ':') t
-      let port = if p == "" then defIndexerPort else fromMaybe defIndexerPort (readMaybe $ T.unpack p)
+      let port = if p == "" then defIndexerPort net else fromMaybe (defIndexerPort net) (readMaybe $ T.unpack p)
       let val = fmap (readMaybe . T.unpack) $ T.splitOn "." h
       case val of
         (Just a):(Just b):(Just c):(Just d):[] -> pure $ Just $ NamedSockAddr t $ SockAddrInet port $ tupleToHostAddress (a,b,c,d)
@@ -152,10 +153,10 @@ parseSockAddrs rs urls = liftIO $ do
 
 -- | Same as the one above, but is better for single url
 -- Hides makeResolvSeed
-parseSingleSockAddr :: (MonadIO m, PlatformNatives) => ResolvSeed -> Text -> m (Maybe NamedSockAddr)
-parseSingleSockAddr rs t = do
+parseSingleSockAddr :: (MonadIO m, PlatformNatives) => NetworkType -> ResolvSeed -> Text -> m (Maybe NamedSockAddr)
+parseSingleSockAddr net rs t = do
   let (h, p) = fmap (T.drop 1) $ T.span (/= ':') t
-  let port = if p == "" then defIndexerPort else fromMaybe defIndexerPort (readMaybe $ T.unpack p)
+  let port = if p == "" then defIndexerPort net else fromMaybe (defIndexerPort net) (readMaybe $ T.unpack p)
   let val = fmap (readMaybe . T.unpack) $ T.splitOn "." h
   case val of
     (Just a):(Just b):(Just c):(Just d):[] -> pure $ Just $ NamedSockAddr t $ SockAddrInet port $ tupleToHostAddress (a,b,c,d)

@@ -91,15 +91,32 @@ torSocks = SocksConf "127.0.0.1" 9050
 toSocksProxy :: SocksConf -> S5.SocksConf
 toSocksProxy (SocksConf a p) = S5.defaultSocksConfFromSockAddr $ makeSockAddr a p
 
+type IndexerUrls = M.Map NetworkType [Text]
+
+defaultIndexers :: IndexerUrls
+defaultIndexers = [(Mainnet, [
+      "ergvein-indexermainnet1.hxr.team"
+    , "ergvein-indexermainnet2.hxr.team"
+    , "ergvein-indexermainnet3.hxr.team"
+    , "indexer.ergvein.net"       -- OwO
+    ])
+  , (Testnet, [
+      "testnet.ergvein.net"
+    ])
+  , (Regtest, [
+      "127.0.0.1:19667"
+    ])
+  ]
+
 data Settings = Settings {
   settingsLang              :: Language
 , settingsStoreDir          :: Text
 , settingsConfigPath        :: Text
 , settingsUnits             :: Maybe Units
 , settingsReqTimeout        :: NominalDiffTime
-, settingsActiveAddrs       :: [Text]
-, settingsDeactivatedAddrs  :: [Text]
-, settingsArchivedAddrs     :: [Text]
+, settingsActiveAddrs       :: IndexerUrls
+, settingsDeactivatedAddrs  :: IndexerUrls
+, settingsArchivedAddrs     :: IndexerUrls
 , settingsExplorerUrl       :: ExplorerUrls
 , settingsPortfolio         :: Bool
 , settingsFiatCurr          :: Fiat
@@ -120,14 +137,9 @@ instance FromJSON Settings where
     settingsConfigPath        <- o .: "configPath"
     settingsUnits             <- o .: "units"
     settingsReqTimeout        <- o .: "reqTimeout"
-    mActiveAddrs              <- o .: "activeAddrs"
-    mDeactivatedAddrs         <- o .: "deactivatedAddrs"
-    mArchivedAddrs            <- o .: "archivedAddrs"
-    let (settingsActiveAddrs, settingsDeactivatedAddrs, settingsArchivedAddrs) =
-          case (mActiveAddrs, mDeactivatedAddrs, mArchivedAddrs) of
-            (Nothing, Nothing, Nothing) -> (defaultIndexers, [], [])
-            (Just [], Just [], Just []) -> (defaultIndexers, [], [])
-            _ -> (fromMaybe [] mActiveAddrs, fromMaybe [] mDeactivatedAddrs, fromMaybe [] mArchivedAddrs)
+    settingsActiveAddrs       <- o .:? "activeAddrs" .!= defaultIndexers
+    settingsDeactivatedAddrs  <- o .:? "deactivatedAddrs" .!= []
+    settingsArchivedAddrs     <- o .:? "archivedAddrs" .!= []
     settingsExplorerUrl       <- o .:? "explorerUrl" .!= defaultExplorerUrls
     settingsPortfolio         <- o .:? "portfolio" .!= False
     settingsFiatCurr          <- o .:? "fiatCurr"  .!= USD
@@ -157,16 +169,11 @@ instance ToJSON Settings where
     , "network"           .= toJSON settingsNetwork
    ]
 
-defIndexerPort :: PortNumber
-defIndexerPort = 8667
-
-defaultIndexers :: [Text]
-defaultIndexers = [
-    "ergvein-indexermainnet1.hxr.team:8667"
-  , "ergvein-indexermainnet2.hxr.team:8667"
-  , "ergvein-indexermainnet3.hxr.team:8667"
-  , "indexer.ergvein.net"       -- OwO
-  ]
+defIndexerPort :: NetworkType -> PortNumber
+defIndexerPort nt = case nt of
+  Mainnet -> 8667
+  Testnet -> 18667
+  Regtest -> 19667
 
 defaultIndexerTimeout :: NominalDiffTime
 defaultIndexerTimeout = 20
