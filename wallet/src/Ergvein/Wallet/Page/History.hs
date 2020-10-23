@@ -7,6 +7,7 @@ import Ergvein.Types.Currency
 import Ergvein.Types.Utxo
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
+import Ergvein.Wallet.Localization.History
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Navbar
 import Ergvein.Wallet.Navbar.Types
@@ -53,7 +54,7 @@ historyTableRow :: MonadFront t m => TransactionView -> m (Event t TransactionVi
 historyTableRow tr@TransactionView{..} = divButton "history-table-row" $ do
   moneyUnits <- fmap (fromMaybe defUnits . settingsUnits) getSettings
   divClass ("history-amount-" <> ((T.toLower . showt) txInOut)) $ (symb txInOut) $ text $ showMoneyUnit txAmount moneyUnits
-  divClass "history-date" $ showTime tr
+  divClass "history-date" $ showTxStatus tr
   divClass ("history-status-" <> ((T.toLower . showt) txInOut) <> " history-" <> confsClass) confsText
   pure tr
   where
@@ -72,7 +73,7 @@ historyTableRowD :: MonadFront t m => Dynamic t Word64 -> Dynamic t TransactionV
 historyTableRowD _ trD = fmap switchDyn $ widgetHoldDyn $ ffor trD $ \tr@TransactionView{..} -> divButton "history-table-row" $ do
     moneyUnits <- fmap (fromMaybe defUnits . settingsUnits) getSettings
     divClass ("history-amount-" <> ((T.toLower . showt) txInOut)) $ symb txInOut $ text $ showMoneyUnit txAmount moneyUnits
-    divClass "history-date" $ showTime tr
+    divClass "history-date" $ showTxStatus tr
     divClass ("history-status-" <> ((T.toLower . showt) txInOut) <> " history-" <> (confsClass tr)) $ confsText tr
     pure tr
   where
@@ -94,3 +95,9 @@ historyTableRowD _ trD = fmap switchDyn $ widgetHoldDyn $ ffor trD $ \tr@Transac
           text $ showt (confs tr) <> "/" <> showt confirmationGap
           spanClass "history-page-status-text-icon" $ elClass "i" "fas fa-exclamation-triangle fa-fw" $ blank
       else text $ showt (confs tr) <> "/" <> showt confirmationGap
+
+showTxStatus :: MonadFront t m => TransactionView -> m ()
+showTxStatus tr@TransactionView{..} = case txStatus of
+  TransUncofirmed -> localizedText HistoryUnconfirmed
+  TransUncofirmedParents -> localizedText HistoryUnconfirmedParents
+  TransConfirmed -> showTime tr

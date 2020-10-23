@@ -203,7 +203,7 @@ renderInactive initPingE nsa = mdo
       pure tglE
 
 navbarWidget :: MonadFrontBase t m => NavbarItem -> m (Dynamic t NavbarItem)
-navbarWidget initItem = divClass "navbar" $ mdo
+navbarWidget initItem = divClass "navbar-2-cols" $ mdo
   selD <- holdDyn initItem selE
   selE <- fmap leftmost $ flip traverse [ActivePage, DisabledPage] $ \i -> do
     let attrD = (\ai -> "navbar-item" <> if i == ai then " active" else "") <$> selD

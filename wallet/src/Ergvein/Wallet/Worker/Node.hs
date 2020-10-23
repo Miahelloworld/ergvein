@@ -1,6 +1,6 @@
 module Ergvein.Wallet.Worker.Node
   (
-    bctNodeController
+    btcNodeController
   ) where
 
 import Control.Exception
@@ -53,8 +53,8 @@ btcLog v = logWrite $ "[nodeController][" <> showt BTC <> "]: " <> v
 btcRefrTimeout :: NominalDiffTime
 btcRefrTimeout = 5
 
-bctNodeController :: MonadFront t m => m ()
-bctNodeController = mdo
+btcNodeController :: MonadFront t m => m ()
+btcNodeController = mdo
   btcLog "Starting"
   sel       <- getNodeNodeReqSelector
   conMapD   <- getNodeConnectionsD
