@@ -5,10 +5,11 @@ module Ergvein.Wallet.Main(
   ) where
 
 import Reflex.Dom.Main (mainWidgetWithCss)
+import Reflex.Localize
 
 import Ergvein.Types.Storage
+import Ergvein.Types.Network
 import Ergvein.Wallet.Elements
-import Ergvein.Wallet.Language
 import Ergvein.Wallet.Loading
 import Ergvein.Wallet.Localization.TestnetDisclaimer
 import Ergvein.Wallet.Log.Writer
@@ -27,7 +28,11 @@ frontend = do
   askPasswordModal
   logWriter =<< fmap fst getLogsTrigger
   logWrite "Entering initial page"
-  mainpageDispatcher
+  net <- getNetworkType
+  case net of
+    Mainnet -> mainnetDispatcher
+    Testnet -> testnetDispatcher
+    Regtest -> testnetDispatcher
 
 startPage :: MonadFront t m => m ()
 startPage = do
@@ -36,9 +41,8 @@ startPage = do
     then restorePage
     else balancesPage
 
-#ifdef TESTNET
-mainpageDispatcher :: MonadFrontBase t m => m ()
-mainpageDispatcher = void $ workflow testnetDisclaimer
+testnetDispatcher :: MonadFrontBase t m => m ()
+testnetDispatcher = void $ workflow testnetDisclaimer
   where
     testnetDisclaimer = Workflow $ wrapperSimple True $ do
       elClass "h4" "testnet-disclaimer-label" $ dynText =<< localized TestnetDisclaimerLabel
@@ -48,7 +52,6 @@ mainpageDispatcher = void $ workflow testnetDisclaimer
     startWallet = Workflow $ do
       void $ retractStack initialPage `liftAuth` retractStack startPage
       pure ((), never)
-#else
-mainpageDispatcher :: MonadFrontBase t m => m ()
-mainpageDispatcher = void $ retractStack initialPage `liftAuth` retractStack startPage
-#endif
+
+mainnetDispatcher :: MonadFrontBase t m => m ()
+mainnetDispatcher = void $ retractStack initialPage `liftAuth` retractStack startPage

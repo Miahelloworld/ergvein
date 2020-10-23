@@ -4,12 +4,13 @@ module Ergvein.Wallet.Page.Restore(
 
 import Data.Foldable (foldl')
 import Data.Maybe (fromMaybe)
-import Reflex.ExternalRef
 
 import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Derive
+import Ergvein.Types.Headers
 import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Filters.Storage
@@ -17,7 +18,6 @@ import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Node.Types
 import Ergvein.Wallet.Page.Balances
-import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Scan
 import Ergvein.Wallet.Storage.Constants
 import Ergvein.Wallet.Storage.Util
@@ -28,15 +28,13 @@ import Ergvein.Wallet.Wrapper
 import qualified Data.Map.Strict as M
 import qualified Data.Vector as V
 
-import Ergvein.Wallet.Debug
-
 restorePage :: forall t m . MonadFront t m =>  m ()
 restorePage = wrapperSimple True $ void $ workflow nodeConnection
   where
     nodeConnection = Workflow $ do
       el "h3" $ text "Connecting to nodes"
-      syncWidget False BTC
-      conmapD <- getNodesByCurrencyD BTC
+      syncWidget False Bitcoin
+      conmapD <- getNodesByCurrencyD Bitcoin
       let upsD = fmap or $ join $ ffor conmapD $ \cm -> sequence $ ffor (M.elems cm) $ \case
             NodeConnBTC con -> nodeconIsUp con
             _ -> pure False
@@ -45,19 +43,20 @@ restorePage = wrapperSimple True $ void $ workflow nodeConnection
 
     heightAsking = Workflow $ do
       el "h3" $ text "Getting current height"
-      syncWidget False BTC
-      heightD <- getCurrentHeight BTC
+      syncWidget False Bitcoin
+      heightD <- getCurrentHeight Bitcoin
       height0E <- tag (current heightD) <$> getPostBuild
       let heightE = leftmost [updated heightD, height0E]
       let nextE = fforMaybe heightE $ \h -> if h == 0 then Nothing else Just downloadFilters
       pure ((), nextE)
 
     downloadFilters = Workflow $ do
+      net <- getNetworkType
+      let h0 = filterStartingHeight $ coinByNetwork Bitcoin net
       el "h3" $ text "Downloading filters"
-      filtersD <- watchFiltersHeight BTC
-      heightD <- getCurrentHeight BTC
+      filtersD <- fmap (fromMaybe h0) <$> watchFiltersHeight Bitcoin
+      heightD <- getCurrentHeight Bitcoin
       el "h4" $ dynText $ do
-        let h0 = filterStartingHeight BTC
         filters <- filtersD
         height <- heightD
         let pct = fromIntegral (filters - h0) / (fromIntegral $ fromIntegral height - h0) :: Float
@@ -69,8 +68,8 @@ restorePage = wrapperSimple True $ void $ workflow nodeConnection
       psD <- getPubStorageD
       let nextE = flip pushAlways filtersE $ const $ do
             ps <- sample . current $ psD
-            let (er, egap) = calcNumGap ps BTC External
-                (ir, igap) = calcNumGap ps BTC Internal
+            let (er, egap) = calcNumGap ps Bitcoin External
+                (ir, igap) = calcNumGap ps Bitcoin Internal
             pure $ if egap >= gapLimit
               then scanInternalKeys igap ir
               else scanKeys egap er
@@ -81,28 +80,30 @@ restorePage = wrapperSimple True $ void $ workflow nodeConnection
     scanKeys :: Int -> Int -> Workflow t m ()
     scanKeys gapN keyNum = Workflow $ do
       logWrite "We are at scan stage"
-      syncWidget False BTC
+      net <- getNetworkType
+      let startHeight = fromIntegral $ filterStartingHeight $ coinByNetwork Bitcoin net
+      syncWidget False Bitcoin
       buildE <- delay 0.1 =<< getPostBuild
-      keys <- pubStorageKeys BTC External <$> getPubStorage
-      heightD <- getCurrentHeight BTC
+      keys <- pubStorageKeys Bitcoin External <$> getPubStorage
+      heightD <- getCurrentHeight Bitcoin
       setSyncProgress $ flip pushAlways buildE $ const $ do
         h <- sample . current $ heightD
-        pure $ SyncProgress BTC $ SyncAddressExternal keyNum 0 (fromIntegral h)
+        pure $ SyncProgress Bitcoin $ SyncAddressExternal keyNum 0 (fromIntegral h)
       if gapN >= gapLimit then do
         ps <- sample . current =<< getPubStorageD
-        storedE <- modifyPubStorage "scanKeys" $ ffor buildE $ const $ Just . pubStorageSetKeyScanned BTC External (Just (keyNum + 1))
-        let (ir, igap) = calcNumGap ps BTC Internal
+        storedE <- modifyPubStorage "scanKeys" $ ffor buildE $ const $ Just . pubStorageSetKeyScanned Bitcoin External (Just (keyNum + 1))
+        let (ir, igap) = calcNumGap ps Bitcoin Internal
         pure((), scanInternalKeys igap ir <$ storedE)
       else if keyNum >= V.length keys then do
-        logWrite "Generating next portion of external BTC keys..."
+        logWrite "Generating next portion of external Bitcoin keys..."
         void $ deriveNewBtcKeys External gapLimit
         pure ((), scanKeys gapN keyNum <$ buildE)
       else do
-        logWrite $ "Scanning external BTC key " <> showt keyNum
-        h0 <- fmap fromIntegral . sample . current =<< getWalletsScannedHeightD BTC
+        logWrite $ "Scanning external Bitcoin key " <> showt keyNum
+        h0 <- fmap (maybe startHeight fromIntegral) . sample . current =<< getWalletsScannedHeightD Bitcoin
         scannedE <- scanningBtcKey External h0 keyNum (keys V.! keyNum)
         hasTxsD <- holdDyn False scannedE
-        storedE <- modifyPubStorage "scanKeys" $ ffor scannedE $ const $ Just . pubStorageSetKeyScanned BTC External (Just keyNum)
+        storedE <- modifyPubStorage "scanKeys" $ ffor scannedE $ const $ Just . pubStorageSetKeyScanned Bitcoin External (Just keyNum)
         let nextE = flip pushAlways storedE $ const $ do
               hastxs <- sample . current $ hasTxsD
               let gapN' = if hastxs then 0 else gapN+1
@@ -112,30 +113,32 @@ restorePage = wrapperSimple True $ void $ workflow nodeConnection
           hastxs <- sample . current $ hasTxsD
           when hastxs $ do
             ps <- sample . current $ psD
-            logWrite $ "We have txs: " <> showt (pubStorageTxs BTC ps)
+            logWrite $ "We have txs: " <> showt (pubStorageTxs Bitcoin ps)
         nextE' <- delay 0.1 nextE
         pure ((), nextE')
 
     scanInternalKeys :: MonadFront t m => Int -> Int -> Workflow t m ()
     scanInternalKeys gapN keyNum = Workflow $ do
+      net <- getNetworkType
+      let startHeight = fromIntegral $ filterStartingHeight $ coinByNetwork Bitcoin net
       buildE <- delay 0.1 =<< getPostBuild
-      keys <- pubStorageKeys BTC Internal <$> getPubStorage
-      syncWidget False BTC
-      heightD <- getCurrentHeight BTC
+      keys <- pubStorageKeys Bitcoin Internal <$> getPubStorage
+      syncWidget False Bitcoin
+      heightD <- getCurrentHeight Bitcoin
       setSyncProgress $ flip pushAlways buildE $ const $ do
         h <- sample . current $ heightD
-        pure $ SyncProgress BTC $ SyncAddressInternal keyNum 0 (fromIntegral h)
+        pure $ SyncProgress Bitcoin $ SyncAddressInternal keyNum 0 (fromIntegral h)
       if gapN >= gapLimit then pure ((), finishScanning <$ buildE)
       else if keyNum >= V.length keys then do
-        logWrite "Generating next portion of internal BTC keys..."
+        logWrite "Generating next portion of internal Bitcoin keys..."
         void $ deriveNewBtcKeys Internal gapLimit
         pure ((), scanInternalKeys gapN keyNum <$ buildE)
       else do
-        logWrite $ "Scanning internal BTC key #" <> showt keyNum
-        h0 <- fmap fromIntegral . sample . current =<< getWalletsScannedHeightD BTC
+        logWrite $ "Scanning internal Bitcoin key #" <> showt keyNum
+        h0 <- fmap (maybe startHeight fromIntegral) . sample . current =<< getWalletsScannedHeightD Bitcoin
         scannedE <- scanningBtcKey Internal h0 keyNum (keys V.! keyNum)
         hasTxsD <- holdDyn False scannedE
-        void $ modifyPubStorage "scanInternalKeys" $ ffor scannedE $ const $ Just . pubStorageSetKeyScanned BTC Internal (Just keyNum)
+        void $ modifyPubStorage "scanInternalKeys" $ ffor scannedE $ const $ Just . pubStorageSetKeyScanned Bitcoin Internal (Just keyNum)
         let nextE = flip pushAlways scannedE $ const $ do
               hastxs <- sample . current $ hasTxsD
               let gapN' = if hastxs then 0 else gapN+1
@@ -144,12 +147,12 @@ restorePage = wrapperSimple True $ void $ workflow nodeConnection
         pure ((), nextE')
 
     finishScanning = Workflow $ do
-      logWrite "Finished scanning BTC keys..."
+      logWrite "Finished scanning Bitcoin keys..."
       buildE <- getPostBuild
-      setSyncProgress $ SyncProgress BTC Synced <$ buildE
-      h <- sample . current =<< getCurrentHeight BTC
-      scanhE <- writeWalletsScannedHeight "finishScanning" $ (BTC, fromIntegral h) <$ buildE
-      clearedE <- performEvent $ clearFilters BTC <$ scanhE
+      setSyncProgress $ SyncProgress Bitcoin Synced <$ buildE
+      h <- sample . current =<< getCurrentHeight Bitcoin
+      scanhE <- writeWalletsScannedHeight "finishScanning" $ (Bitcoin, fromIntegral h) <$ buildE
+      clearedE <- performEvent $ clearFilters Bitcoin <$ scanhE
       void $ modifyPubStorage "finishScanning" $ ffor clearedE $ const $ \ps -> Just $ ps {
           _pubStorage'restoring = False
         }
@@ -173,10 +176,10 @@ deriveNewBtcKeys :: MonadFront t m => KeyPurpose -> Int -> m (Event t ())
 deriveNewBtcKeys keyPurpose n = do
   buildE <- getPostBuild
   ps <- getPubStorage
-  let keys = pubStorageKeys BTC keyPurpose ps
+  let keys = pubStorageKeys Bitcoin keyPurpose ps
       keysN = V.length keys
-      masterPubKey = maybe (error "No BTC master key!") id $ pubStoragePubMaster BTC ps
+      masterPubKey = maybe (error "No Bitcoin master key!") id $ pubStoragePubMaster Bitcoin ps
       newKeys = derivePubKey masterPubKey keyPurpose . fromIntegral <$> [keysN .. keysN+n-1]
-      ks = maybe (error "No BTC key storage!") id $ pubStorageKeyStorage BTC ps
+      ks = maybe (error "No Bitcoin key storage!") id $ pubStorageKeyStorage Bitcoin ps
       ks' = foldl' (flip $ addXPubKeyToKeystore keyPurpose) ks newKeys
-  modifyPubStorage "deriveNewBtcKeys" $ (Just . pubStorageSetKeyStorage BTC ks') <$ buildE
+  modifyPubStorage "deriveNewBtcKeys" $ (Just . pubStorageSetKeyStorage Bitcoin ks') <$ buildE

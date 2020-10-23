@@ -13,7 +13,6 @@ import Text.Read
 
 import Ergvein.Text
 import Ergvein.Types
-import Ergvein.Types.Derive
 import Ergvein.Wallet.Alert
 import Ergvein.Wallet.Clipboard
 import Ergvein.Wallet.Elements
@@ -63,6 +62,7 @@ sendPage cur minit = mdo
     stripCurPrefix t = T.dropWhile (== '/') $ fromMaybe t $ T.stripPrefix (curprefix cur) t
     -- TODO: write type annotation here
     sendWidget title navbar thisWidget = wrapperNavbar False title thisWidget navbar $ mdo
+      net <- getNetworkType
       let recipientInit = maybe "" (\(_, _, a) -> egvAddrToString a) minit
           amountInit = (\(a, _, _) -> a) <$> minit
           feeInit = (\(_, f, _) -> f) <$> minit
@@ -87,7 +87,7 @@ sendPage cur minit = mdo
         submitE <- outlineSubmitTextIconButtonClass "w-100" SendBtnString "fas fa-paper-plane fa-lg"
         let validationE = poke submitE $ \_ -> do
               recipient <- sampleDyn recipientD
-              pure (toEither $ validateRecipient cur (T.unpack $ stripCurPrefix recipient))
+              pure (toEither $ validateRecipient net cur (T.unpack $ stripCurPrefix recipient))
             goE = flip push validationE $ \erecipient -> do
               mfee <- sampleDyn feeD
               mamount <- sampleDyn amountD
@@ -125,13 +125,13 @@ btcSendConfirmationWidget v@((unit, amount), fee, addr) = do
   let thisWidget = Just $ pure $ btcSendConfirmationWidget v
       navbar = if isAndroid
         then blank
-        else navbarWidget BTC thisWidget NavbarSend
+        else navbarWidget Bitcoin thisWidget NavbarSend
   wrapperNavbar False title thisWidget navbar $ divClass "send-confirm-box" $ mdo
     psD <- getPubStorageD
     utxoKeyD <- holdUniqDyn $ do
       ps <- psD
-      let utxo = ps ^. pubStorage'currencyPubStorages . at BTC & fmap (view currencyPubStorage'utxos)
-          mkey = getLastUnusedKey Internal =<< pubStorageKeyStorage BTC ps
+      let utxo = ps ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (view currencyPubStorage'utxos)
+          mkey = getLastUnusedKey Internal =<< pubStorageKeyStorage Bitcoin ps
       pure $ (utxo, mkey)
     utxoKey0 <- fmap Left $ sampleDyn utxoKeyD
     stxE' <- eventToNextFrame stxE
@@ -184,15 +184,16 @@ btcSendConfirmationWidget v@((unit, amount), fee, addr) = do
 -- TODO: modify to accomodate Ergo
 confirmationInfoWidget :: MonadFront t m => (UnitBTC, Word64) -> Word64 -> EgvAddress -> m ()
 confirmationInfoWidget (unit, amount) estFee addr = divClass "send-confirm-info" $ do
+  net <- getNetworkType
   h4  $ localizedText SSConfirm
   divClass "mb-1 ml-1 mr-1" $ do
-    mkrow AmountString $ showMoneyUnit (mkMoney amount) us <> " " <> symbolUnit cur us
+    mkrow AmountString $ showMoneyUnit (mkMoney net amount) us <> " " <> symbolUnit cur us
     mkrow RecipientString $ egvAddrToString addr
     mkrow SSFee $ showt estFee <> " " <> symbolUnit cur (Units (Just BtcSat) Nothing)
-    mkrow SSTotal $ showMoneyUnit (mkMoney $ amount + estFee) us <> " " <> symbolUnit cur us
+    mkrow SSTotal $ showMoneyUnit (mkMoney net $ amount + estFee) us <> " " <> symbolUnit cur us
   where
     cur = egvAddrCurrency addr
-    mkMoney = Money cur
+    mkMoney net = Money $ coinByNetwork cur net
     us = Units (Just unit) Nothing
     mkrow :: (MonadFront t m, LocalizedPrint l) => l -> Text -> m ()
     mkrow a b = divClass "ta-l" $ do
@@ -220,16 +221,17 @@ txSignSendWidget :: MonadFront t m
   -> [UtxoPoint]    -- ^ List of utxo points used as inputs
   -> m (Event t (HT.Tx, UnitBTC, Word64, Word64, EgvAddress)) -- ^ Return the Tx + all relevant information for display
 txSignSendWidget addr unit amount fee changeKey change pick = mdo
-  let keyTxt = egvAddrToString $ egvXPubKeyToEgvAddress $ pubKeyBox'key changeKey
+  net <- getNetworkType
+  let keyTxt = egvAddrToString $ egvXPubKeyAddress $ pubKeyBox'key changeKey
   let outs = [(egvAddrToString addr, amount), (keyTxt, change)]
-  let etx = HT.buildAddrTx btcNetwork (upPoint <$> pick) outs
+  let etx = HT.buildAddrTx (bitcoinNetwork net) (upPoint <$> pick) outs
   let estFee = HT.guessTxFee fee 2 $ length pick
   confirmationInfoWidget (unit, amount) estFee addr
   showSignD <- holdDyn True . (False <$) =<< eventToNextFrame etxE
   etxE <- either' etx (const $ confirmationErrorWidget CEMTxBuildFail >> pure never) $ \tx -> do
     fmap switchDyn $ widgetHoldDyn $ ffor showSignD $ \b -> if not b then pure never else do
       signE <- outlineButton SendBtnSign
-      etxE' <- fmap (fmapMaybe id) $ withWallet $ (signTxWithWallet tx pick) <$ signE
+      etxE' <- fmap (fmapMaybe id) $ withWallet $ signTxWithWallet net tx pick <$ signE
       void $ widgetHold (pure ()) $ ffor etxE' $ either (const $ void $ confirmationErrorWidget CEMSignFail) (const $ pure ())
       handleDangerMsg $ (either (Left . T.pack) Right) <$> etxE'
   fmap switchDyn $ widgetHold (pure never) $ ffor etxE $ \tx -> do
@@ -239,10 +241,10 @@ txSignSendWidget addr unit amount fee changeKey change pick = mdo
 
 -- | Sign function which has access to the private storage
 -- TODO: generate missing private keys
-signTxWithWallet :: (MonadIO m, PlatformNatives) => HT.Tx -> [UtxoPoint] -> PrvStorage -> m (Maybe (Either String HT.Tx))
-signTxWithWallet tx pick prv = do
+signTxWithWallet :: (MonadIO m, PlatformNatives) => NetworkType -> HT.Tx -> [UtxoPoint] -> PrvStorage -> m (Maybe (Either String HT.Tx))
+signTxWithWallet net tx pick prv = do
   let PrvKeystore _ ext int = prv ^. prvStorage'currencyPrvStorages
-        . at BTC . non (error "btcSendConfirmationWidget: not exsisting store!")
+        . at Bitcoin . non (error "btcSendConfirmationWidget: not exsisting store!")
         . currencyPrvStorage'prvKeystore
   mvals <- fmap (fmap unzip . sequence) $ flip traverse pick $ \(UtxoPoint opoint UtxoMeta{..}) -> do
     let sig = HT.SigInput utxoMeta'script utxoMeta'amount opoint HS.sigHashAll Nothing
@@ -251,7 +253,7 @@ signTxWithWallet tx pick prv = do
           Internal -> fmap (xPrvKey . unEgvXPrvKey) $ (V.!?) int utxoMeta'index
           External -> fmap (xPrvKey . unEgvXPrvKey) $ (V.!?) ext utxoMeta'index
     maybe (logWrite errMsg >> pure Nothing) (pure . Just . (sig,)) msec
-  pure $ (uncurry $ HT.signTx btcNetwork tx) <$> mvals
+  pure $ (uncurry $ HT.signTx (bitcoinNetwork net) tx) <$> mvals
 
 -- | Btc fee selector
 btcFeeSelectionWidget :: forall t m . MonadFront t m
@@ -288,7 +290,7 @@ btcFeeSelectionWidget minit sendE = do
       FSSLvl (l, f) -> el "label" (localizedText $ FSLevelDesc l f)       >> pure (Just $ (feeLvlToMode l, f))
   where
     extractFeeD feesD lvl = ffor feesD $
-      maybe FSSNoCache (FSSLvl . (lvl,) . fromIntegral . fst . extractFee lvl) . M.lookup BTC
+      maybe FSSNoCache (FSSLvl . (lvl,) . fromIntegral . fst . extractFee lvl) . M.lookup Bitcoin
     feeLvlToMode lvl = case lvl of
       FeeCheap    -> BFMLow
       FeeModerate -> BFMMid
@@ -300,9 +302,11 @@ manualFeeSelector = (fmap . fmap) (maybe FSSNoManual FSSManual . readMaybe . T.u
 -- | Input field with units. Converts everything to satoshis and returns the unit
 sendAmountWidget :: MonadFront t m => Maybe (UnitBTC, Word64) -> Event t () -> m (Dynamic t (Maybe (UnitBTC, Word64)))
 sendAmountWidget minit validateE = mdo
+  net <- getNetworkType
+  let btcMoney = Money (coinByNetwork Bitcoin net)
   setUs <- fmap (fromMaybe defUnits . settingsUnits) getSettings
   let (unitInit, txtInit) = maybe (setUs, "") (\(u, a) -> let us = Units (Just u) Nothing
-        in (us, showMoneyUnit (Money BTC a) us)) minit
+        in (us, showMoneyUnit (btcMoney a) us)) minit
   let errsD = fmap (maybe [] id) amountErrsD
   let isInvalidD = fmap (maybe "" (const "is-invalid")) amountErrsD
   amountValD <- el "div" $ mdo
@@ -315,7 +319,7 @@ sendAmountWidget minit validateE = mdo
   pure $ (either (const Nothing) Just) <$> amountValD
   where
     availableBalanceWidget uD = do
-      balanceValue <- balancesWidget BTC
+      balanceValue <- balancesWidget Bitcoin
       balanceText <- localized SendAvailableBalance
       let balanceVal = zipDynWith (\x y -> showMoneyUnit x (Units (Just y) Nothing) <> " " <> btcSymbolUnit y) balanceValue uD
           balanceTxt = zipDynWith (\x y -> x <> ": " <> y) balanceText balanceVal

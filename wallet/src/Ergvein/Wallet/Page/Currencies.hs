@@ -21,7 +21,7 @@ import Ergvein.Wallet.Wrapper
 selectCurrenciesPage :: MonadFrontBase t m => WalletSource -> Mnemonic -> m ()
 selectCurrenciesPage wt mnemonic = wrapperSimple True $ do
   -- TODO: remove this when ERGO is ready
-  e <- fmap ([BTC] <$) getPostBuild
+  e <- fmap ([Bitcoin] <$) getPostBuild
   -- uncomment this when ERGO is ready
   -- e <- selectCurrenciesWidget []
   void $ nextWidget $ ffor e $ \ac -> Retractable {

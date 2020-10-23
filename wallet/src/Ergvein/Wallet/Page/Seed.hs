@@ -9,7 +9,6 @@ module Ergvein.Wallet.Page.Seed(
 
 import Control.Monad.Random.Strict
 import Data.Bifunctor
-import Data.ByteString (ByteString)
 import Data.Either (either)
 import Data.List (permutations)
 import Data.Text.Encoding (decodeUtf8With)
@@ -18,18 +17,15 @@ import Ergvein.Crypto
 import Ergvein.Text
 import Ergvein.Types.Restore
 import Ergvein.Wallet.Alert
-import Ergvein.Wallet.Camera
 import Ergvein.Wallet.Clipboard
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Elements.Input
 import Ergvein.Wallet.Localization.Password
 import Ergvein.Wallet.Localization.Seed
 import Ergvein.Wallet.Localization.Util
-import Ergvein.Wallet.Log.Event
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Page.Currencies
 import Ergvein.Wallet.Page.Password
-import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Resize
 import Ergvein.Wallet.Storage.Util
 import Ergvein.Wallet.Validate
@@ -179,9 +175,6 @@ restoreFromMnemonicPage = wrapperSimple True $ mdo
 pasteBtn :: MonadFrontBase t m => m (Event t ())
 pasteBtn = outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
 
-scanQRBtn :: MonadFrontBase t m => m (Event t ())
-scanQRBtn = outlineTextIconButtonTypeButton CSScanQR "fas fa-qrcode fa-lg"
-
 askSeedPasswordPage :: MonadFrontBase t m => EncryptedByteString -> m ()
 askSeedPasswordPage encryptedMnemonic = do
   passE <- askTextPasswordPage PPSMnemonicUnlock ("" :: Text)
@@ -193,41 +186,12 @@ askSeedPasswordPage encryptedMnemonic = do
     }
 
 decodeMnemonic :: Text -> Maybe (Either Text EncryptedByteString)
-decodeMnemonic text
-  | (length words == 24) && (all (wordTrieElem . T.toLower) words) = Just $ Left text
-  | otherwise = Right <$> (eitherToMaybe . S.decode <=< decodeBase58CheckBtc) text
-  where words = T.words text
+decodeMnemonic t
+  | (length ws == 24) && (all (wordTrieElem . T.toLower) ws) = Just $ Left t
+  | otherwise = Right <$> (eitherToMaybe . S.decode <=< decodeBase58CheckBtc) t
+  where ws = T.words t
 
 decodeEnocdedEncryptedMnemonic :: Text -> Either [SeedPageStrings] (Either Text EncryptedByteString)
 decodeEnocdedEncryptedMnemonic encodedEncryptedMnemonic = case decodeMnemonic encodedEncryptedMnemonic of
   Nothing -> Left [SPSMnemonicDecodeError]
   Just encryptedMnemonic -> Right encryptedMnemonic
-
-seedRestoreWidget :: forall t m . MonadFrontBase t m => m (Event t Mnemonic)
-seedRestoreWidget = mdo
-  langD <- getLanguage
-  ixD <- foldDyn (\_ i -> i + 1) 1 wordE
-  h4 $ dynText $
-    localizedShow <$> langD <*> (SPSEnterWord <$> ixD)
-  suggestionsD <- holdDyn Nothing $ ffor (updated inputD) $ \t -> if t == ""
-    then Nothing else Just $ take 6 $ getWordsWithPrefix $ T.toLower t
-  btnE <- fmap switchDyn $ widgetHoldDyn $ ffor suggestionsD $ \case
-    Nothing -> waiting
-    Just ws -> divClass "restore-seed-buttons-wrapper" $ fmap leftmost $ flip traverse ws $ \w -> do
-      btnClickE <- buttonClass (pure "button button-outline") w
-      pure $ w <$ btnClickE
-  let enterPressedE = keypress Enter txtInput
-      inputD = _inputElement_value txtInput
-      enterE = flip push enterPressedE $ const $ do
-        sugs <- sampleDyn suggestionsD
-        pure $ case sugs of
-          Just (w:[]) -> Just w
-          _ -> Nothing
-      wordE = leftmost [btnE, enterE]
-  txtInput <- textInput $ def & inputElementConfig_setValue .~ fmap (const "") wordE
-  mnemD <- foldDyn (\w m -> let p = if m == "" then "" else " " in m <> p <> (T.toLower w)) "" wordE
-  goE <- delay 0.1 (updated ixD)
-  pure $ attachWithMaybe (\mnem i -> if i == 25 then Just mnem else Nothing) (current mnemD) goE
-  where
-    waiting :: m (Event t Text)
-    waiting = (h4 $ localizedText SPSWaiting) >> pure never

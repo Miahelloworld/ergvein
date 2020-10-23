@@ -13,15 +13,11 @@ import Ergvein.Types.Derive
 import Ergvein.Types.Restore
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Alert
-import Ergvein.Wallet.Currencies
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Elements.Input
 import Ergvein.Wallet.Localization.Password
 import Ergvein.Wallet.Monad
-import Ergvein.Wallet.Page.Balances
 import Ergvein.Wallet.Password
-import Ergvein.Wallet.Scan
-import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Storage.AuthInfo
 import Ergvein.Wallet.Wrapper
 import Reflex.Localize
@@ -50,7 +46,7 @@ confirmEmptyPage wt mnemonic curs login pass path = wrapperSimple True $ do
   h5 $ localizedText CEPConsequences
   divClass "fit-content ml-a mr-a" $ do
     setE <- divClass "" (submitClass "button button-outline w-100" PWSSet)
-    retract =<< divClass "" (submitClass "button button-outline w-100" CEPBack)
+    _ <- retract =<< divClass "" (submitClass "button button-outline w-100" CEPBack)
     void $ nextWidget $ ffor setE $ const $ Retractable {
         retractableNext = performAuth wt mnemonic curs login pass path
       , retractablePrev = Nothing
@@ -58,7 +54,8 @@ confirmEmptyPage wt mnemonic curs login pass path = wrapperSimple True $ do
 
 performAuth :: MonadFrontBase t m => WalletSource -> Mnemonic -> [Currency] -> Text -> Password -> DerivPrefix -> m ()
 performAuth wt mnemonic curs login pass path = do
-  storage <- initAuthInfo wt (Just path) mnemonic curs login pass
+  net <- getNetworkType
+  storage <- initAuthInfo net wt path mnemonic curs login pass
   buildE <- getPostBuild
   authInfoE <- handleDangerMsg $ storage <$ buildE
   void $ setAuthInfo $ Just <$> authInfoE
@@ -72,17 +69,18 @@ setupLoginPage wt mpath mnemonic curs = wrapperSimple True $ do
     pathD <- setupDerivPrefix curs mpath
     btnE <- submitSetBtn
   void $ nextWidget $ ffor (updated ((,) <$> logD <*> pathD)) $ \(l, path) -> Retractable {
-      retractableNext = setupPatternPage wt (Just path) mnemonic l curs
+      retractableNext = setupPatternPage wt path mnemonic l curs
     , retractablePrev = Just $ pure $ setupLoginPage wt (Just path) mnemonic curs
     }
 
-setupPatternPage :: MonadFrontBase t m => WalletSource -> Maybe DerivPrefix -> Mnemonic -> Text -> [Currency] -> m ()
-setupPatternPage wt mpath mnemonic l curs = wrapperSimple True $ do
+setupPatternPage :: MonadFrontBase t m => WalletSource -> DerivPrefix -> Mnemonic -> Text -> [Currency] -> m ()
+setupPatternPage wt path mnemonic l curs = wrapperSimple True $ do
   divClass "password-setup-title" $ h4 $ localizedText PatPSTitle
   divClass "password-setup-descr" $ h5 $ localizedText PatPSDescr
   patE <- setupPattern
+  net <- getNetworkType
   let logPassE = fmap (\p -> (l,p)) patE
-  createStorageE <- performEvent $ fmap (uncurry $ initAuthInfo wt mpath mnemonic curs) logPassE
+  createStorageE <- performEvent $ fmap (uncurry $ initAuthInfo net wt path mnemonic curs) logPassE
   authInfoE <- handleDangerMsg createStorageE
   void $ setAuthInfo $ Just <$> authInfoE
 

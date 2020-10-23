@@ -21,6 +21,7 @@ module Ergvein.Wallet.Monad.Storage
   , getTxById
   , getBlockHeaderByHash
   , storeBlockHeadersE
+  , getCurrencyAddresses
   , attachNewBtcHeader
   ) where
 
@@ -37,6 +38,7 @@ import Network.Haskoin.Block (Timestamp)
 import Reflex
 
 import Ergvein.Crypto
+import Ergvein.Types.Address
 import Ergvein.Types.Currency
 import Ergvein.Types.Keys
 import Ergvein.Types.Storage
@@ -215,6 +217,15 @@ storeBlockHeadersE caller cur reqE = do
     in ffor mmap $ \m -> modifyCurrStorage cur (currencyPubStorage'headers %~ M.union m) ps
   pure $ attachWithMaybe (\a _ -> a) (current reqD) storedE
   where clr = caller <> ":" <> "storeBlockHeadersE"
+
+-- | Get dynamic list of all known addresses for the currency
+getCurrencyAddresses :: MonadStorage t m => Currency -> m (Dynamic t [EgvAddress])
+getCurrencyAddresses cur = do
+  psD <- getPubStorageD
+  pure $ ffor psD $ \ps -> let
+    keystore = ps ^. pubStorage'currencyPubStorages . at cur . non (error $ "getTxStorage: " <> show cur <> " storage does not exist!")
+                  . currencyPubStorage'pubKeystore
+    in  V.toList $ extractAddrs keystore
 
 -- ===========================================================================
 --           HasPubStorage helpers

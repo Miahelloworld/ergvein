@@ -3,19 +3,14 @@ module Ergvein.Wallet.Page.Settings(
     settingsPage
   ) where
 
-import Control.Lens
-import Data.List
 import Data.Maybe (fromMaybe, catMaybes)
 import Reflex.Dom
 import Reflex.ExternalRef
 
 import Ergvein.Crypto.Keys
 import Ergvein.Text
-import Ergvein.Types.AuthInfo
 import Ergvein.Types.Currency
-import Ergvein.Types.Derive
 import Ergvein.Types.Storage
-import Ergvein.Wallet.Alert
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Localization.Network
@@ -23,30 +18,26 @@ import Ergvein.Wallet.Localization.Settings
 import Ergvein.Wallet.Localization.Util
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Node
-import Ergvein.Wallet.Page.Currencies
 import Ergvein.Wallet.Page.Settings.MnemonicExport
 import Ergvein.Wallet.Page.Settings.Network
 import Ergvein.Wallet.Page.Settings.Unauth
-import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Storage
-import Ergvein.Wallet.Storage.Util
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as S
 import qualified Data.Dependent.Map as DM
 
 -- TODO: uncomment commented lines when ERGO is ready
 data SubPageSettings
   = GoLanguage
-  -- | GoCurrencies
   | GoUnits
   | GoNetwork
   | GoPortfolio
   | GoMnemonicExport Mnemonic
   | GoDns
   | GoNodes
+  | GoTor
 
 -- TODO: uncomment commented lines when ERGO is ready
 settingsPage :: MonadFront t m => m ()
@@ -61,6 +52,7 @@ settingsPage = do
             , (GoPortfolio, STPSButPortfolio)
             , (GoDns, STPSButDns)
             , (GoNodes, STPSButNodes)
+            , (GoTor, STPSButTor)
             ]
       goE' <- fmap leftmost $ flip traverse btns $ \(v,l) -> fmap (v <$) $ outlineButton l
       mnemonicExportBtnE <- outlineButton STPSButMnemonicExport
@@ -71,13 +63,13 @@ settingsPage = do
       void $ nextWidget $ ffor goE $ \spg -> Retractable {
           retractableNext = case spg of
             GoLanguage                -> languagePage
-            -- GoCurrencies              -> currenciesPage
             GoNetwork                 -> networkSettingsPage
             GoUnits                   -> unitsPage
             GoPortfolio               -> portfolioPage
             GoMnemonicExport mnemonic -> mnemonicExportPage mnemonic
             GoDns                     -> dnsPage
             GoNodes                   -> btcNodesPage
+            GoTor                     -> torPage
         , retractablePrev = Just $ pure settingsPage
         }
 
@@ -97,7 +89,7 @@ btcNodesPage = do
           let addr = nodeconUrl node
           (e,_) <- elAttr' "span" [("class", "mt-a mb-a mr-1")] $ elClass "i" "fas fa-times" $ pure ()
           let closeE = (addr, NodeMsgClose) <$ domEvent Click e
-          postNodeMessage BTC closeE
+          postNodeMessage Bitcoin closeE
           elDynAttr "span" clsD $ elClass "i" "fas fa-circle" $ pure ()
           divClass "mt-a mb-a network-name-txt" $ text $ showt addr
         pure ()
@@ -130,47 +122,6 @@ torPage = do
   title <- localized STPSTitle
   wrapper True title (Just $ pure torPage) torPageWidget
 
-currenciesPage :: MonadFront t m => m ()
-currenciesPage = do
-  title <- localized STPSTitle
-  wrapper True title (Just $ pure currenciesPage) $ do
-    h3 $ localizedText STPSSetsActiveCurrs
-    divClass "initial-options" $ mdo
-      activeCursD <- getActiveCursD
-      ps <- getPubStorage
-      authD <- getAuthInfo
-      currListE <- fmap switchDyn $ widgetHoldDyn $ ffor activeCursD $ \currs ->
-        selectCurrenciesWidget $ S.toList currs
-      void $ uac currListE
-      updateAE <- withWallet $ ffor currListE $ \curs prvStr -> do
-          auth <- sample . current $ authD
-          let authNew = auth & authInfo'storage . storage'pubStorage . pubStorage'activeCurrencies .~ curs
-              difC = curs \\ (_pubStorage'activeCurrencies ps)
-              mpath = auth ^. authInfo'storage . storage'pubStorage . pubStorage'pathPrefix
-              mL = Map.fromList [(currency, mkStore mpath prvStr currency) | currency <- difC ]
-              authN2 = authNew & authInfo'storage . storage'pubStorage . pubStorage'currencyPubStorages %~ (Map.union mL)
-          pure $ Just $ authN2
-      setAuthInfoE <- setAuthInfo updateAE
-      storeWallet "currenciesPage" (void $ updated authD)
-      showSuccessMsg $ STPSSuccess <$ setAuthInfoE
-      pure ()
-  where
-    uac cE =  updateActiveCurs $ fmap (\cl -> const (S.fromList cl)) $ cE
-    mkStore mpath prvStr currency = let
-      dpath = extendDerivPath currency <$> mpath
-      in CurrencyPubStorage {
-        _currencyPubStorage'pubKeystore   = (createPubKeystore $ deriveCurrencyMasterPubKey dpath (_prvStorage'rootPrvKey prvStr) currency)
-      , _currencyPubStorage'path          = dpath
-      , _currencyPubStorage'transactions  = Map.empty
-      , _currencyPubStorage'height        = Nothing
-      , _currencyPubStorage'scannedKey    = (Just 0, Just 0)
-      , _currencyPubStorage'utxos         = Map.empty
-      , _currencyPubStorage'scannedHeight = Nothing
-      , _currencyPubStorage'headers       = Map.empty
-      , _currencyPubStorage'outgoing      = S.empty
-      , _currencyPubStorage'headerSeq     = btcCheckpoints
-      }
-
 -- TODO: uncomment commented lines when ERGO is ready
 unitsPage :: MonadFront t m => m ()
 unitsPage = do
@@ -180,7 +131,7 @@ unitsPage = do
     pure ()
   where
     content = do
-      h3 $ localizedText $ STPSSelectUnitsFor BTC
+      h3 $ localizedText $ STPSSelectUnitsFor Bitcoin
       ubE <- divClass "initial-options grid1" $ do
         settings <- getSettings
         let setUs = getSettingsUnits settings
@@ -244,14 +195,12 @@ portfolioPage = do
 lineOption :: MonadFront t m => m a -> m a
 lineOption = divClass "network-wrapper"
 
-nameOption, descrOption :: (MonadFront t m, LocalizedPrint a) => a -> m ()
-nameOption = divClass "network-name" . localizedText
+descrOption :: (MonadFront t m, LocalizedPrint a) => a -> m ()
 descrOption = (>>) elBR . divClass "network-descr" . localizedText
 
-valueOptionDyn, descrOptionDyn, descrOptionDynNoBR :: (MonadFront t m, LocalizedPrint a) => Dynamic t a -> m ()
+valueOptionDyn, descrOptionDyn :: (MonadFront t m, LocalizedPrint a) => Dynamic t a -> m ()
 valueOptionDyn v = getLanguage >>= \langD -> divClass "network-value" $ dynText $ ffor2 langD v localizedShow
 descrOptionDyn v = getLanguage >>= \langD -> (>>) elBR (divClass "network-descr" $ dynText $ ffor2 langD v localizedShow)
-descrOptionDynNoBR v = getLanguage >>= \langD -> divClass "network-descr" $ dynText $ ffor2 langD v localizedShow
 
 labelHorSep, elBR :: MonadFront t m => m ()
 labelHorSep = elAttr "hr" [("class","network-hr-sep-lb")] blank

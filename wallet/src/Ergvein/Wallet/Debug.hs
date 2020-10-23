@@ -7,22 +7,20 @@ module Ergvein.Wallet.Debug
 import Control.Lens
 import Control.Monad.IO.Class
 import Data.ByteString (ByteString)
-import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
-import Network.Haskoin.Block hiding (BlockHash, BlockHeight)
+import Data.Maybe
 import Network.Haskoin.Transaction
 
 import Ergvein.Text
 import Ergvein.Types.Address
 import Ergvein.Types.Currency
-import Ergvein.Types.Derive
 import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Types.Utxo
-import Ergvein.Types.Transaction (BlockHash, BlockHeight)
+import Ergvein.Types.Transaction (BlockHash(..), BlockHeight)
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Native
-import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Storage
 import Ergvein.Wallet.Wrapper
 import Ergvein.Index.Protocol.Types (Message(..))
@@ -65,7 +63,7 @@ debugWidget = el "div" $ do
     p <- avgD
     pure $ "Avg.indexer ping: " <> showt p
   dbgFiltersTest
-  h5 . dynText . fmap showt =<< getCurrentHeight BTC
+  h5 . dynText . fmap showt =<< getCurrentHeight Bitcoin
   let goE = leftmost [utxoE, pubIntE, pubExtE, prvIntE, prvExtE, mnemonicE]
   void $ nextWidget $ ffor goE $ \sel -> Retractable {
       retractableNext = case sel of
@@ -101,7 +99,7 @@ dbgUtxoPage :: MonadFront t m => m ()
 dbgUtxoPage = wrapper False "UTXO" (Just $ pure dbgUtxoPage) $ divClass "currency-content" $ do
   void . el "div" $ retract =<< outlineButton backTxt
   pubSD <- getPubStorageD
-  let utxoD = ffor pubSD $ \ps -> M.toList $ fromMaybe M.empty $ ps ^. pubStorage'currencyPubStorages . at BTC & fmap (view currencyPubStorage'utxos)
+  let utxoD = ffor pubSD $ \ps -> M.toList $ fromMaybe M.empty $ ps ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (view currencyPubStorage'utxos)
   void $ widgetHoldDyn $ ffor utxoD $ \utxo -> divClass "" $ do
     void $ flip traverse utxo $ \(o, UtxoMeta{..}) -> do
       el "div" $ text $ showt $ outPointHash o
@@ -113,35 +111,36 @@ dbgPubInternalsPage :: MonadFront t m => m ()
 dbgPubInternalsPage = wrapper False "Public internal keys" (Just $ pure dbgPubInternalsPage) $ divClass "currency-content" $ do
   void . el "div" $ retract =<< outlineButton backTxt
   pubSD <- getPubStorageD
-  let intsD = ffor pubSD $ \ps -> V.indexed $ fromMaybe V.empty $ ps ^. pubStorage'currencyPubStorages . at BTC & fmap (\a -> a ^. currencyPubStorage'pubKeystore & pubKeystore'internal)
+  let intsD = ffor pubSD $ \ps -> V.indexed $ fromMaybe V.empty $ ps ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (\a -> a ^. currencyPubStorage'pubKeystore & pubKeystore'internal)
   void $ widgetHoldDyn $ ffor intsD $ \ints -> divClass "" $ do
     flip traverse ints $ \(i, EgvPubKeyBox{..}) -> do
-      let keyTxt = egvAddrToString $ egvXPubKeyToEgvAddress pubKeyBox'key
+      let keyTxt = egvAddrToString $ egvXPubKeyAddress pubKeyBox'key
       el "div" $ text $ showt i <> ": " <> keyTxt <> "; Txs: " <> showt (S.size pubKeyBox'txs) <> " Man: " <> showt pubKeyBox'manual
 
 dbgPubExternalsPage :: MonadFront t m => m ()
 dbgPubExternalsPage = wrapper False "Public external keys" (Just $ pure dbgPubExternalsPage) $ divClass "currency-content" $ do
   void . el "div" $ retract =<< outlineButton backTxt
   pubSD <- getPubStorageD
-  let intsD = ffor pubSD $ \ps -> V.indexed $ fromMaybe V.empty $ ps ^. pubStorage'currencyPubStorages . at BTC & fmap (\a -> a ^. currencyPubStorage'pubKeystore & pubKeystore'external)
+  let intsD = ffor pubSD $ \ps -> V.indexed $ fromMaybe V.empty $ ps ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (\a -> a ^. currencyPubStorage'pubKeystore & pubKeystore'external)
   void $ widgetHoldDyn $ ffor intsD $ \ints -> divClass "" $ do
     flip traverse ints $ \(i, EgvPubKeyBox{..}) -> do
-      let keyTxt = egvAddrToString $ egvXPubKeyToEgvAddress pubKeyBox'key
+      let keyTxt = egvAddrToString $ egvXPubKeyAddress pubKeyBox'key
       el "div" $ text $ showt i <> ": " <> keyTxt <> "; Txs: " <> showt (S.size pubKeyBox'txs) <> " Man: " <> showt pubKeyBox'manual
 
 dbgPrivInternalsPage :: MonadFront t m => m ()
 dbgPrivInternalsPage = wrapper False "Private internal keys" (Just $ pure dbgPrivInternalsPage) $ divClass "currency-content" $ do
   void . el "div" $ retract =<< outlineButton backTxt
   buildE <- getPostBuild
+  net <- getNetworkType
   intE <- withWallet $ ffor buildE $ \_ prv -> do
     let PrvKeystore _ _ int = prv ^. prvStorage'currencyPrvStorages
-          . at BTC . non (error "btcSendConfirmationWidget: not exsisting store!")
+          . at Bitcoin . non (error "btcSendConfirmationWidget: not exsisting store!")
           . currencyPrvStorage'prvKeystore
     pure $ V.indexed int
   void $ widgetHold (pure ()) $ ffor intE $ \ints -> divClass "" $ do
     void $ flip traverse ints $ \(i, k) -> do
       let k' = unEgvXPrvKey k
-      let p = egvAddrToString $ egvXPubKeyToEgvAddress $ flip BtcXPubKey "" $ HK.deriveXPubKey k'
+      let p = egvAddrToString $ egvXPubKeyAddress $ BtcXPubKey (HK.deriveXPubKey k') "" net
       el "div" $ text $ showt i <> " ------------------------------------------"
       el "div" $ text $ showt $ k'
       el "div" $ text $ p
@@ -150,15 +149,16 @@ dbgPrivExternalsPage :: MonadFront t m => m ()
 dbgPrivExternalsPage = wrapper False "Private external keys" (Just $ pure dbgPrivExternalsPage) $ divClass "currency-content" $ do
   void . el "div" $ retract =<< outlineButton backTxt
   buildE <- getPostBuild
+  net <- getNetworkType
   extE <- withWallet $ ffor buildE $ \_ prv -> do
     let PrvKeystore _ ext _ = prv ^. prvStorage'currencyPrvStorages
-          . at BTC . non (error "btcSendConfirmationWidget: not exsisting store!")
+          . at Bitcoin . non (error "btcSendConfirmationWidget: not exsisting store!")
           . currencyPrvStorage'prvKeystore
     pure $ V.indexed ext
   void $ widgetHold (pure ()) $ ffor extE $ \exts -> divClass "" $ do
     void $ flip traverse exts $ \(i, k) -> do
       let k' = unEgvXPrvKey k
-      let p = egvAddrToString $ egvXPubKeyToEgvAddress $ flip BtcXPubKey "" $ HK.deriveXPubKey k'
+      let p = egvAddrToString $ egvXPubKeyAddress $ BtcXPubKey (HK.deriveXPubKey k') "" net
       el "div" $ text $ showt i <> " ------------------------------------------"
       el "div" $ text $ showt $ k'
       el "div" $ text $ p
@@ -174,7 +174,7 @@ dbgMnemonicPage = wrapper False "Mnemonic" (Just $ pure dbgMnemonicPage) $ divCl
 dbgFiltersTest :: MonadFront t m => m ()
 dbgFiltersTest = do
   getE <- outlineButton $ mkTxt "dbgFiltersTest"
-  filtsE <- getFilters BTC $ (327298, 10) <$ getE
+  filtsE <- getFilters Bitcoin $ (327298, 10) <$ getE
   performEvent_ $ ffor filtsE $ \filts -> void $ flip traverse filts $ \(bh, filt) -> do
     logWrite "====================================="
     logWrite $ showt bh
@@ -182,12 +182,12 @@ dbgFiltersTest = do
 
 getFilters :: MonadFront t m => Currency -> Event t (BlockHeight, Int) -> m (Event t [(BlockHash, ByteString)])
 getFilters cur e = do
-  respE <- requestRandomIndexer $ ffor e $ \(h, n) -> (BTC, ) $
+  net <- getNetworkType
+  let curcode = currencyToCurrencyCode $ coinByNetwork cur net
+  respE <- requestRandomIndexer $ ffor e $ \(h, n) -> (Bitcoin, ) $
     MFiltersRequest $ FilterRequest curcode (fromIntegral h) (fromIntegral n)
   pure $ fforMaybe respE $ \case
     (_, MFiltersResponse (FilterResponse{..})) -> if filterResponseCurrency /= curcode
       then Nothing
-      else Just $ V.toList $ ffor filterResponseFilters $ \(BlockFilter bid filt) -> (bid, filt)
+      else Just $ V.toList $ ffor filterResponseFilters $ \(BlockFilter bid filt) -> (BlockHash bid, filt)
     _ -> Nothing
-  where
-    curcode = currencyToCurrencyCode cur

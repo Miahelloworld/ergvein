@@ -5,8 +5,8 @@ module Ergvein.Wallet.Page.Balances(
 
 import Data.Maybe (fromMaybe)
 
-import Ergvein.Types.Currency
 import Ergvein.Types.Storage
+import Ergvein.Types.Currency
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Monad
@@ -40,7 +40,7 @@ balancesPage = do
   walletName <- getWalletName
   title <- localized walletName
   wrapper False title (Just $ pure balancesPage) $ do
-    syncWidget False BTC -- TODO: rework this when we add ERGO
+    syncWidget False Bitcoin -- TODO: rework this when we add ERGO
     currenciesList walletName
 
 currenciesList :: MonadFront t m => Text -> m ()

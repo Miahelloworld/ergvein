@@ -8,7 +8,6 @@ import Control.Lens
 import Ergvein.Text
 import Ergvein.Types.Address
 import Ergvein.Types.Currency
-import Ergvein.Types.Derive
 import Ergvein.Types.Keys
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Clipboard
@@ -20,10 +19,7 @@ import Ergvein.Wallet.Localization.Util
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Navbar
 import Ergvein.Wallet.Navbar.Types
-import Ergvein.Wallet.Page.Canvas
 import Ergvein.Wallet.Page.QRCode
-import Ergvein.Wallet.Share
-import Ergvein.Wallet.Widget.Balance
 import Ergvein.Wallet.Wrapper
 
 #ifdef ANDROID
@@ -35,7 +31,7 @@ receivePage cur = do
   pubStoreD <- getPubStorageD
   let lastUnusedKeyD = ffor pubStoreD $ \ps ->
         (getLastUnusedKey External . _currencyPubStorage'pubKeystore) =<< (ps ^. pubStorage'currencyPubStorages . at cur)
-  widgetHoldDyn $ ffor lastUnusedKeyD $ \case
+  _ <- widgetHoldDyn $ ffor lastUnusedKeyD $ \case
     Nothing -> exceededGapLimit cur
     Just (i, key) -> receivePageWidget cur i key
   pure ()
@@ -67,11 +63,11 @@ receivePageWidget cur i EgvPubKeyBox{..} = do
     setFlagToExtPubKey "receivePageWidget:1" $ (cur, i) <$ newE
     clipboardCopy (keyTxt <$ copyE)
     divClass "receive-adr-andr" $ text $ "#" <> showt i <> ": " <> keyTxt
-    labelD <- divClass "button-receive" $ textFieldNoLabel $ getLabelFromEgvPubKey pubKeyBox'key
+    labelD <- divClass "button-receive" $ textFieldNoLabel $ egvXPubLabel pubKeyBox'key
     btnE <- labelAddrBtn
     setLabelToExtPubKey "receivePageWidget:2" $ attachWith (\l _ -> (cur, i, l)) (current labelD) btnE
   where
-    keyTxt = egvAddrToString $ egvXPubKeyToEgvAddress pubKeyBox'key
+    keyTxt = egvAddrToString $ egvXPubKeyAddress pubKeyBox'key
     prefixedKeyText = curprefix cur <> keyTxt
 
 shareAddrBtn :: MonadFront t m => m (Event t ())
@@ -96,12 +92,12 @@ receivePageWidget cur i EgvPubKeyBox{..} = do
       clipboardCopy (keyTxt <$ copyE)
     divClass "receive-adr" $ text $ "#" <> showt i <> ": " <> keyTxt
     divClass "label-block" $ do
-      labelD <- textFieldNoLabel $ getLabelFromEgvPubKey pubKeyBox'key
+      labelD <- textFieldNoLabel $ egvXPubLabel pubKeyBox'key
       btnE <- labelAddrBtn
       setLabelToExtPubKey "receivePageWidget:2" $ attachWith (\l _ -> (cur, i, l)) (current labelD) btnE
       pure ()
   where
-    keyTxt = egvAddrToString $ egvXPubKeyToEgvAddress pubKeyBox'key
+    keyTxt = egvAddrToString $ egvXPubKeyAddress pubKeyBox'key
 #endif
 
 newAddrBtn :: MonadFront t m => m (Event t ())

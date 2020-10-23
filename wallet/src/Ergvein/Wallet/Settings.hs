@@ -6,6 +6,7 @@ module Ergvein.Wallet.Settings (
   , loadSettings
   , storeSettings
   , defaultSettings
+  , getSettingsExplorerUrl
   , defaultIndexers
   , defIndexerPort
   , defaultIndexerTimeout
@@ -195,6 +196,11 @@ defaultSettings home =
       , settingsSocksProxy        = Nothing
       , settingsNetwork           = Mainnet
       }
+
+getSettingsExplorerUrl :: Currency -> NetworkType -> Settings -> Text
+getSettingsExplorerUrl cur net settings = fromMaybe defaultUrl $ M.lookup net =<< M.lookup cur (settingsExplorerUrl settings)
+  where
+    defaultUrl = fromMaybe "getSettingsExplorerUrl: not-defined-url" $ M.lookup net =<< M.lookup cur defaultExplorerUrls
 
 -- | TODO: Implement some checks to see if the configPath folder is ok to write to
 storeSettings :: MonadIO m => Settings -> m ()

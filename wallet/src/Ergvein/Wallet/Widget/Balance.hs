@@ -8,6 +8,7 @@ import Control.Lens
 import Data.Maybe (fromMaybe)
 
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Types.Utxo
 import Ergvein.Wallet.Language
@@ -19,14 +20,17 @@ import qualified Data.List as L
 import qualified Data.Map.Strict as M
 
 ergoBalances :: MonadFront t m => m (Dynamic t Money)
-ergoBalances = pure $ pure $ Money ERGO 0
+ergoBalances = do
+  net <- getNetworkType
+  pure $ pure $ Money (coinByNetwork Ergo net) 0
 
 btcBalances :: MonadFront t m => m (Dynamic t Money)
 btcBalances = do
+  net <- getNetworkType
   pubStorageD <- getPubStorageD
   pure $ ffor pubStorageD $ \pubStorage -> let
-    utxos = M.elems $ fromMaybe M.empty $ pubStorage ^. pubStorage'currencyPubStorages . at BTC & fmap (view currencyPubStorage'utxos)
-    in Money BTC $ L.foldl' helper 0 utxos
+    utxos = M.elems $ fromMaybe M.empty $ pubStorage ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (view currencyPubStorage'utxos)
+    in Money (coinByNetwork Bitcoin net) $ L.foldl' helper 0 utxos
   where
     helper :: MoneyUnit -> UtxoMeta -> MoneyUnit
     helper balance UtxoMeta{utxoMeta'status = EUtxoSending _} = balance
@@ -34,8 +38,8 @@ btcBalances = do
 
 balancesWidget :: MonadFront t m => Currency -> m (Dynamic t Money)
 balancesWidget cur = case cur of
-  ERGO -> ergoBalances
-  BTC  -> btcBalances
+  Ergo    -> ergoBalances
+  Bitcoin -> btcBalances
 
 balanceTitleWidget :: MonadFront t m => Currency -> m (Dynamic t Text)
 balanceTitleWidget cur = do

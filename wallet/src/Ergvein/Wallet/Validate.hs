@@ -13,6 +13,7 @@ import Data.Ratio
 import Data.Validation hiding (validate)
 import Ergvein.Types.Address
 import Ergvein.Types.Currency
+import Ergvein.Types.Network 
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Monad
 import Text.Parsec
@@ -95,15 +96,15 @@ validateBtcWithUnits unit x = case validateNonEmptyString x of
         Failure errs'' -> _Failure # errs''
         Success (PositiveRational result'') -> _Success # (floor $ result'' * 10 ^ btcResolution unit)
 
-validateAddress :: Currency -> String -> Validation [VError] EgvAddress
-validateAddress currency addrStr = case egvAddrFromString currency (T.pack addrStr) of
+validateAddress :: NetworkType -> Currency -> String -> Validation [VError] EgvAddress
+validateAddress net currency addrStr = case egvAddrFromString net currency (T.pack addrStr) of
   Nothing   -> _Failure # [InvalidAddress]
   Just addr -> _Success # addr
 
-validateRecipient :: Currency -> String -> Validation [VError] EgvAddress
-validateRecipient currency addrStr = case validateNonEmptyString addrStr of
+validateRecipient :: NetworkType -> Currency -> String -> Validation [VError] EgvAddress
+validateRecipient net currency addrStr = case validateNonEmptyString addrStr of
   Failure errs -> _Failure # errs
-  Success (NonEmptyString nonEmptyAddrStr) -> case validateAddress currency nonEmptyAddrStr of
+  Success (NonEmptyString nonEmptyAddrStr) -> case validateAddress net currency nonEmptyAddrStr of
     Failure errs' -> _Failure # errs'
     Success addr -> _Success # addr
 

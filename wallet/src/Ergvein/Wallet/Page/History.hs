@@ -4,19 +4,15 @@ module Ergvein.Wallet.Page.History(
 
 import Ergvein.Text
 import Ergvein.Types.Currency
-import Ergvein.Types.Derive
 import Ergvein.Types.Utxo
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Navbar
 import Ergvein.Wallet.Navbar.Types
-import Ergvein.Wallet.Node.BTC.Blocks
-import Ergvein.Wallet.Node.BTC.Mempool
 import Ergvein.Wallet.Page.Transaction
 import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Settings
-import Ergvein.Wallet.Widget.Balance
 import Ergvein.Wallet.Wrapper
 
 import Data.Map.Strict as Map
@@ -43,13 +39,13 @@ historyPage cur = do
 
 historyTableWidget :: MonadFront t m => Currency -> m (Event t TransactionView)
 historyTableWidget cur = divClass "history-table" $ case cur of
-  BTC -> do
-    (txsD, hghtD) <- transactionsGetting BTC
+  Bitcoin -> do
+    (txsD, hghtD) <- transactionsGetting Bitcoin
     let txMapD = Map.fromList . L.zip [(0 :: Int)..] <$> txsD
     mapED <- listWithKey txMapD (\_ -> historyTableRowD hghtD)
     let txClickE = switchDyn $ mergeMap <$> mapED
     pure $ fmapMaybe id $ headMay . Map.elems <$> txClickE
-  ERGO -> do
+  Ergo -> do
     txClickE <- traverse historyTableRow []
     pure $ leftmost txClickE
 
