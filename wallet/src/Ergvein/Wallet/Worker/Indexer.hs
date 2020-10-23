@@ -10,9 +10,9 @@ import Reflex.Dom
 import Reflex.ExternalRef
 
 import Ergvein.Text
+import Ergvein.Types.Network
 import Ergvein.Wallet.Monad.Client
 import Ergvein.Wallet.Monad.Prim
-import Ergvein.Wallet.Monad.Base
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Indexer.Socket
 
@@ -24,8 +24,8 @@ connectionTimeout = 60
 reconnectTimeout :: NominalDiffTime
 reconnectTimeout = 5
 
-indexerNodeController :: MonadFrontBase t m => [NamedSockAddr] -> m ()
-indexerNodeController initAddrs = mdo
+indexerNodeController :: (MonadBaseConstr t m, MonadIndexClient t m, MonadHasSettings t m) => NetworkType -> [NamedSockAddr] -> m ()
+indexerNodeController net initAddrs = mdo
   nodeLog "Starting"
   sel <- getIndexReqSelector
   (addrE, _) <- getActivationEF
@@ -40,7 +40,7 @@ indexerNodeController initAddrs = mdo
   valD <- listWithKeyShallowDiff initMap actE $ \nsa@(NamedSockAddr _ u) _ _ -> do
     nodeLog $ "<" <> showt u <> ">: Connect"
     let reqE = select sel $ Const2 u
-    conn <- initIndexerConnection nsa reqE
+    conn <- initIndexerConnection net nsa reqE
     modifyExternalRef connRef $ \cm -> (M.insert u conn cm, ())
     closedE' <- delay 0.1 $ indexConClosedE conn
     failedToConnectE <- connectionWidget conn

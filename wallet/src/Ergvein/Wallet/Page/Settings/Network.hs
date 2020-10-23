@@ -168,10 +168,11 @@ renderInactive :: MonadFrontBase t m => Event t () -> NamedSockAddr -> m ()
 renderInactive initPingE nsa = mdo
   sel <- getIndexReqSelector
   tglD <- holdDyn False tglE
+  net <- getNetworkType
   (fstPingE, refrE) <- headTailE $ leftmost [initPingE, pingE]
   tglE <- fmap switchDyn $ divClass "network-wrapper mt-1" $ widgetHold (startingWidget tglD) $ ffor fstPingE $ const $ do
       let reqE = select sel $ Const2 (namedAddrSock nsa)
-      conn <- initIndexerConnection nsa reqE
+      conn <- initIndexerConnection net nsa reqE
       pingD <- indexerConnPingerWidget conn refrE
       fmap switchDyn $ widgetHoldDyn $ ffor pingD $ \p -> do
         tglE' <- divClass "network-name" $ do

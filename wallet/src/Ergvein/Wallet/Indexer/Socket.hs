@@ -38,8 +38,8 @@ import qualified Data.ByteString.Lazy       as BL
 import qualified Data.Map.Strict            as M
 import qualified Data.Vector.Unboxed        as VU
 
-initIndexerConnection :: MonadFrontBase t m => NamedSockAddr -> Event t IndexerMsg ->  m (IndexerConnection t)
-initIndexerConnection (NamedSockAddr sname sa) msgE = mdo
+initIndexerConnection :: (MonadBaseConstr t m, MonadHasSettings t m) => NetworkType -> NamedSockAddr -> Event t IndexerMsg ->  m (IndexerConnection t)
+initIndexerConnection net (NamedSockAddr sname sa) msgE = mdo
   (msname, msport) <- liftIO $ getNameInfo [NI_NUMERICHOST, NI_NUMERICSERV] True True sa
   let peer = fromJust $ Peer <$> msname <*> msport
   let restartE = fforMaybe msgE $ \case
@@ -80,8 +80,6 @@ initIndexerConnection (NamedSockAddr sname sa) msgE = mdo
   let openE = fmapMaybe (\b -> if b then Just () else Nothing) $ updated shakeD
 
   -- Track filters height
-
-  net <- getNetworkType
   performEvent $ ffor respE $ \case
     MVersion v -> logWrite . showt $ v
     _ -> pure ()

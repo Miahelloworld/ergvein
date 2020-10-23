@@ -143,7 +143,7 @@ instance MonadBaseConstr t m => MonadIndexClient t (UnauthM t m) where
   getActivationEF = asks unauth'activateIndexEF
   {-# INLINE getActivationEF #-}
 
-newEnv :: MonadFrontBase t m
+newEnv :: MonadBaseConstr t m
   => Settings
   -> Chan (IO ()) -- UI callbacks channel
   -> m (UnauthEnv t)
@@ -198,7 +198,7 @@ newEnv settings uiChan = do
         , unauth'activateIndexEF  = indexEF
         }
   flip runReaderT env $ do
-    indexerNodeController socadrs
+    indexerNodeController (settingsNetwork settings) socadrs
   pure env
 
 runEnv :: (MonadBaseConstr t m, PlatformNatives, HasVersion)
