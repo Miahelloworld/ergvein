@@ -10,7 +10,6 @@ module Ergvein.Wallet.Monad.Storage
   , setFlagToExtPubKey
   , updateBtcUtxoSet
   , getWalletsScannedHeightD
-  , getWalletsScannedHeightD_
   , writeWalletsScannedHeight
   , reconfirmBtxUtxoSet
   , getBtcUtxoD
@@ -45,7 +44,6 @@ import Ergvein.Types.Transaction
 import Ergvein.Types.Utxo
 import Ergvein.Wallet.Monad.Prim
 import Ergvein.Wallet.Native
-import Ergvein.Wallet.Platform
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -86,9 +84,7 @@ setLastSeenHeight caller cur e = void . modifyPubStorage clr $ ffor e $ \h ps ->
 
 addTxToPubStorage :: MonadStorage t m => Text -> Event t (TxId, EgvTx) -> m ()
 addTxToPubStorage caller txE = void . modifyPubStorage clr $ ffor txE $ \(txid, etx) ps -> Just $ let
-  cur = case etx of
-    BtcTx{} -> BTC
-    ErgTx{} -> ERGO
+  cur = egvTxCurrency etx
   in ps & pubStorage'currencyPubStorages
       . at cur . _Just                  -- TODO: Fix this part once there is a way to generate keys. Or signal an impposible situation
       . currencyPubStorage'transactions . at txid .~ Just etx
@@ -104,7 +100,7 @@ addTxMapToPubStorage caller txmapE = void . modifyPubStorage clr $ ffor txmapE $
 
 setLabelToExtPubKey :: MonadStorage t m => Text -> Event t (Currency, Int, Text) -> m ()
 setLabelToExtPubKey caller reqE = void . modifyPubStorage clr $ ffor reqE $ \(cur, i, l) ->
-  updateKeyBoxWith cur External i $ \kb -> kb {pubKeyBox'key = updateKeyLabel l $ pubKeyBox'key kb}
+  updateKeyBoxWith cur External i $ \kb -> kb {pubKeyBox'key = setEgvXPubLabel l $ pubKeyBox'key kb}
   where clr = caller <> ":" <> "setLabelToExtPubKey"
 
 setFlagToExtPubKey :: MonadStorage t m => Text -> Event t (Currency, Int) -> m ()
@@ -113,7 +109,8 @@ setFlagToExtPubKey caller reqE = void . modifyPubStorage clr $ ffor reqE $ \(cur
   where clr = caller <> ":" <> "setFlagToExtPubKey"
 
 insertTxsUtxoInPubKeystore :: MonadStorage t m
-  => Text -> Currency
+  => Text
+  -> Currency
   -> Event t (V.Vector (ScanKeyBox, M.Map TxId EgvTx), BtcUtxoUpdate)
   -> m (Event  t ())
 insertTxsUtxoInPubKeystore caller cur reqE = modifyPubStorage clr $ ffor reqE $ \(vec, (o,i)) ps ->
@@ -121,7 +118,7 @@ insertTxsUtxoInPubKeystore caller cur reqE = modifyPubStorage clr $ ffor reqE $ 
     txmap = M.unions $ V.toList $ snd $ V.unzip vec
     ps1 = modifyCurrStorage cur (currencyPubStorage'transactions %~ M.union txmap) ps
     ps2 = case cur of
-      BTC -> updateBtcUtxoSet (o,i) ps1
+      Bitcoin -> updateBtcUtxoSet (o,i) ps1
       _ -> ps1
     upd (ScanKeyBox{..}, txm) ps' = let txs = M.elems txm in updateKeyBoxWith cur scanBox'purpose scanBox'index
       (\kb -> kb {pubKeyBox'txs = S.union (pubKeyBox'txs kb) $ S.fromList (fmap egvTxId txs)}) ps'
@@ -133,7 +130,7 @@ insertTxsUtxoInPubKeystore caller cur reqE = modifyPubStorage clr $ ffor reqE $ 
 
 updateBtcUtxoSet :: BtcUtxoUpdate -> PubStorage -> PubStorage
 updateBtcUtxoSet upds@(o,i) ps = if (M.null o && null i) then ps else
-  modifyCurrStorage BTC (\cps -> cps & currencyPubStorage'utxos %~ updateBtcUtxoSetPure upds) ps
+  modifyCurrStorage Bitcoin (\cps -> cps & currencyPubStorage'utxos %~ updateBtcUtxoSetPure upds) ps
 
 updateKeyBoxWith :: Currency -> KeyPurpose -> Int -> (EgvPubKeyBox -> EgvPubKeyBox) -> PubStorage -> Maybe PubStorage
 updateKeyBoxWith cur kp i f ps =
@@ -151,22 +148,13 @@ updateKeyBoxWith cur kp i f ps =
       Internal -> pubKeystore'internal
       External -> pubKeystore'external
 
-updateKeyLabel :: Text -> EgvXPubKey -> EgvXPubKey
-updateKeyLabel l key = case key of
-  ErgXPubKey k _ -> ErgXPubKey k l
-  BtcXPubKey k _ -> BtcXPubKey k l
-
 reconfirmBtxUtxoSet :: MonadStorage t m => Text -> Event t BlockHeight -> m ()
 reconfirmBtxUtxoSet caller reqE = void . modifyPubStorage clr $ ffor reqE $ \bh ps ->
-  Just $ modifyCurrStorage BTC (\cps -> cps & currencyPubStorage'utxos %~ reconfirmBtxUtxoSetPure bh) ps
+  Just $ modifyCurrStorage Bitcoin (\cps -> cps & currencyPubStorage'utxos %~ reconfirmBtxUtxoSetPure bh) ps
   where clr = caller <> ":" <> "reconfirmBtxUtxoSet"
 
-getWalletsScannedHeightD :: MonadStorage t m => Currency -> m (Dynamic t BlockHeight)
-getWalletsScannedHeightD cur = fmap  (fromMaybe h0) <$> getWalletsScannedHeightD_ cur
-  where h0 = fromIntegral $ filterStartingHeight cur
-
-getWalletsScannedHeightD_ :: MonadStorage t m => Currency -> m (Dynamic t (Maybe BlockHeight))
-getWalletsScannedHeightD_ cur = do
+getWalletsScannedHeightD :: MonadStorage t m => Currency -> m (Dynamic t (Maybe BlockHeight))
+getWalletsScannedHeightD cur = do
   psD <- getPubStorageD
   pure $ ffor psD $ \ps -> join $ ps ^. pubStorage'currencyPubStorages . at cur
     & \mcps -> ffor mcps $ \cps -> cps ^. currencyPubStorage'scannedHeight
@@ -181,10 +169,10 @@ writeWalletsScannedHeight caller reqE = modifyPubStorage clr $ ffor reqE $ \(cur
 attachNewBtcHeader :: MonadStorage t m => Text -> Bool -> Event t (HB.BlockHeight, Timestamp, HB.BlockHash) -> m (Event t ())
 attachNewBtcHeader caller updHeight reqE = modifyPubStorage clr $ ffor reqE $ \(he, ts, ha) ps -> let
   heha = (he, ha)
-  mvec = join $ ps ^. pubStorage'currencyPubStorages . at BTC
+  mvec = join $ ps ^. pubStorage'currencyPubStorages . at Bitcoin
     & fmap (consifNEq heha . snd . _currencyPubStorage'headerSeq)
   mseq = ffor mvec $ \v -> (ts, ) $ if V.length v > 8 then V.init v else v
-  in ffor mseq $ \s -> ps & pubStorage'currencyPubStorages . at BTC
+  in ffor mseq $ \s -> ps & pubStorage'currencyPubStorages . at Bitcoin
     %~ \mcps -> ffor mcps $ \cps -> cps
       & currencyPubStorage'headerSeq .~ s
       & if updHeight
@@ -203,7 +191,7 @@ getBtcUtxoD :: MonadStorage t m => m (Dynamic t BtcUtxoSet)
 getBtcUtxoD = do
   pubD <- getPubStorageD
   pure $ ffor pubD $ \ps -> fromMaybe M.empty $
-    ps ^. pubStorage'currencyPubStorages . at BTC & fmap (view currencyPubStorage'utxos)
+    ps ^. pubStorage'currencyPubStorages . at Bitcoin & fmap (view currencyPubStorage'utxos)
 
 addOutgoingTx :: MonadStorage t m => Text -> Event t EgvTx -> m (Event t ())
 addOutgoingTx caller reqE =  modifyPubStorage clr $ ffor reqE $ \etx ->
@@ -232,10 +220,10 @@ storeBlockHeadersE caller cur reqE = do
 --           HasPubStorage helpers
 -- ===========================================================================
 
-getBtcBlockHashByTxHash :: HasPubStorage m => HT.TxHash -> m (Maybe HB.BlockHash)
-getBtcBlockHashByTxHash bth = do
+getBtcBlockHashByTxHash :: HasPubStorage m => Currency -> HT.TxHash -> m (Maybe HB.BlockHash)
+getBtcBlockHashByTxHash cur bth = do
   ps <- askPubStorage
-  pure $ join $ ps ^. pubStorage'currencyPubStorages . at BTC . non (error "getBtcBlockHashByTxHash: not exsisting store!")
+  pure $ join $ ps ^. pubStorage'currencyPubStorages . at cur . non (error "getBtcBlockHashByTxHash: not exsisting store!")
     . currencyPubStorage'transactions . at th & fmap getEgvTxMeta & fmap etxMetaHash . join
   where th = hkTxHashToEgv bth
 
@@ -248,8 +236,8 @@ getTxStorage cur = do
 getTxById :: HasTxStorage m => TxId -> m (Maybe EgvTx)
 getTxById tid = fmap (M.lookup tid) askTxStorage
 
-getBlockHeaderByHash :: HasPubStorage m => HB.BlockHash -> m (Maybe HB.BlockHeader)
-getBlockHeaderByHash bh = do
+getBlockHeaderByHash :: HasPubStorage m => Currency -> HB.BlockHash -> m (Maybe HB.BlockHeader)
+getBlockHeaderByHash cur bh = do
   ps <- askPubStorage
-  pure $ ps ^. pubStorage'currencyPubStorages . at BTC . non (error "getBtcBlockHashByTxHash: not exsisting store!")
+  pure $ ps ^. pubStorage'currencyPubStorages . at cur . non (error "getBtcBlockHashByTxHash: not exsisting store!")
     . currencyPubStorage'headers . at bh

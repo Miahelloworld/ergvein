@@ -42,14 +42,14 @@ import Ergvein.Text
 import Ergvein.Types.AuthInfo
 import Ergvein.Types.Currency
 import Ergvein.Types.Derive
+import Ergvein.Types.Headers
 import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Types.Transaction as ETT
 import Ergvein.Wallet.Localization.Native
 import Ergvein.Wallet.Localization.Storage
-import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Storage.Constants
-
 import qualified Data.ByteString as BS
 import qualified Data.Map.Merge.Strict as MM
 import qualified Data.Map.Strict as M
@@ -71,12 +71,13 @@ createPrvKeystore masterPrvKey =
       internalKeys  = V.unfoldrN initialInternalAddressCount internalGen 0
   in PrvKeystore masterPrvKey externalKeys internalKeys
 
-createPrvStorage :: Maybe DerivPrefix -> Mnemonic -> EgvRootXPrvKey -> PrvStorage
-createPrvStorage mpath mnemonic rootPrvKey = PrvStorage mnemonic rootPrvKey prvStorages mpath
+createPrvStorage :: NetworkType -> DerivPrefix -> Mnemonic -> EgvRootXPrvKey -> PrvStorage
+createPrvStorage net path mnemonic rootPrvKey = PrvStorage mnemonic rootPrvKey prvStorages path net
   where prvStorages = M.fromList [
             (currency, let
-              dpath = extendDerivPath currency <$> mpath
-              kstore = createPrvKeystore $ deriveCurrencyMasterPrvKey dpath rootPrvKey currency
+              coin = coinByNetwork currency net
+              dpath = extendDerivPath coin path
+              kstore = createPrvKeystore $ deriveCurrencyMasterPrvKey dpath rootPrvKey coin
               in CurrencyPrvStorage kstore dpath) |
             currency <- allCurrencies
           ]
@@ -97,12 +98,12 @@ createPubKeystore masterPubKey =
       internalKeys = V.unfoldrN initialInternalAddressCount (keygen Internal) 0
   in PubKeystore masterPubKey externalKeys internalKeys
 
-createPubStorage :: Bool -> Maybe DerivPrefix -> EgvRootXPrvKey -> [Currency] -> PubStorage
-createPubStorage isRestored mpath rootPrvKey cs = PubStorage rootPubKey pubStorages cs isRestored mpath
+createPubStorage :: NetworkType -> Bool -> DerivPrefix -> EgvRootXPrvKey -> [Currency] -> PubStorage
+createPubStorage net isRestored path rootPrvKey cs = PubStorage rootPubKey pubStorages cs isRestored path net
   where restState = if isRestored then (Just 0, Just 0) else (Nothing, Nothing)
         rootPubKey = EgvRootXPubKey $ deriveXPubKey $ unEgvRootXPrvKey rootPrvKey
         mkStore c = let
-          dpath = extendDerivPath c <$> mpath
+          dpath = extendDerivPath c path
           in CurrencyPubStorage {
             _currencyPubStorage'pubKeystore   = (createPubKeystore $ deriveCurrencyMasterPubKey dpath rootPrvKey c)
           , _currencyPubStorage'path          = dpath
@@ -113,23 +114,24 @@ createPubStorage isRestored mpath rootPrvKey cs = PubStorage rootPubKey pubStora
           , _currencyPubStorage'scannedHeight = Nothing
           , _currencyPubStorage'headers       = M.empty
           , _currencyPubStorage'outgoing      = S.empty
-          , _currencyPubStorage'headerSeq     = btcCheckpoints
+          , _currencyPubStorage'headerSeq     = headerCheckpoints c
           }
-        pubStorages = M.fromList [(currency, mkStore currency) | currency <- cs]
+        pubStorages = M.fromList [(currency, mkStore $ coinByNetwork currency net) | currency <- cs]
 
 createStorage :: MonadIO m
-  => Bool -- ^ Flag that set to True if wallet was restored, not fresh generation
-  -> Maybe DerivPrefix -- ^ Override Bip44 derivation path in keys
+  => NetworkType
+  -> Bool -- ^ Flag that set to True if wallet was restored, not fresh generation
+  -> DerivPrefix -- ^ Override Bip44 derivation path in keys
   -> Mnemonic -- ^ Mnemonic to generate keys
   -> (WalletName, Password) -- ^ Wallet file name and encryption password
   -> [Currency] -- ^ Default currencies
   -> m (Either StorageAlert WalletStorage)
-createStorage isRestored mpath mnemonic (login, pass) cs = case mnemonicToSeed "" mnemonic of
+createStorage net isRestored path mnemonic (login, pass) cs = case mnemonicToSeed "" mnemonic of
    Left err -> pure $ Left $ SAMnemonicFail $ showt err
    Right seed -> do
     let rootPrvKey = EgvRootXPrvKey $ makeXPrvKey seed
-        prvStorage = createPrvStorage mpath mnemonic rootPrvKey
-        pubStorage = createPubStorage isRestored mpath rootPrvKey cs
+        prvStorage = createPrvStorage net path mnemonic rootPrvKey
+        pubStorage = createPubStorage net isRestored path rootPrvKey cs
     encryptPrvStorageResult <- encryptPrvStorage prvStorage pass
     case encryptPrvStorageResult of
       Left err -> pure $ Left err
@@ -210,7 +212,7 @@ decryptStorage encryptedStorage prvKey = do
 encryptBSWithAEAD :: (MonadIO m, MonadRandom m) => ByteString -> Password -> m (Either StorageAlert EncryptedByteString)
 encryptBSWithAEAD bs password = do
   salt <- genRandomSalt32
-  let secretKey = Key (fastPBKDF2_SHA256 defaultPBKDF2Params (encodeUtf8 password) salt) :: Key AES256 ByteString
+  let sk = Key (fastPBKDF2_SHA256 defaultPBKDF2Params (encodeUtf8 password) salt) :: Key AES256 ByteString
   iv <- genRandomIV (undefined :: AES256)
   case iv of
     Nothing -> pure $ Left $ SACryptoError "Failed to generate an AES initialization vector"
@@ -218,7 +220,7 @@ encryptBSWithAEAD bs password = do
       let ivBS = convert iv' :: ByteString
           saltBS = convert salt :: ByteString
           header = BS.concat [saltBS, ivBS]
-      case encryptWithAEAD AEAD_GCM secretKey iv' header bs defaultAuthTagLength of
+      case encryptWithAEAD AEAD_GCM sk iv' header bs defaultAuthTagLength of
         Left err -> pure $ Left $ SACryptoError $ showt err
         Right (authTag, ciphertext) -> do
           let authTag' = unsafeSizedByteArray (convert authTag :: ByteString) :: SizedByteArray 16 ByteString
@@ -226,13 +228,13 @@ encryptBSWithAEAD bs password = do
 
 decryptBSWithAEAD :: EncryptedByteString -> Password -> Either StorageAlert ByteString
 decryptBSWithAEAD encryptedBS password =
-  case decryptWithAEAD AEAD_GCM secretKey iv header ciphertext authTag' of
+  case decryptWithAEAD AEAD_GCM sk iv header ciphertext authTag' of
     Nothing -> Left $ SACryptoError "Failed to decrypt message"
     Just decryptedBS -> Right decryptedBS
   where
     salt = encryptedByteString'salt encryptedBS
     saltBS = convert salt :: ByteString
-    secretKey = Key (fastPBKDF2_SHA256 defaultPBKDF2Params (encodeUtf8 password) salt) :: Key AES256 ByteString
+    sk = Key (fastPBKDF2_SHA256 defaultPBKDF2Params (encodeUtf8 password) salt) :: Key AES256 ByteString
     iv = encryptedByteString'iv encryptedBS
     ivBS = convert iv :: ByteString
     authTag = encryptedByteString'authTag encryptedBS
@@ -263,7 +265,7 @@ saveStorageToFile caller pubKey storage = do
   case encryptedStorage of
     Left _ -> fail "Failed to encrypt storage"
     Right encStorage -> do
-      moveStoredFile fname backupFname
+      _ <- moveStoredFile fname backupFname
       storeValue fname encStorage True
 
 -- | The same as saveStorageToFile, but does not fail and returns the error instead
@@ -277,7 +279,7 @@ saveStorageSafelyToFile caller pubKey storage = do
   case encryptedStorage of
     Left err -> pure $ Left err
     Right encStorage -> do
-      moveStoredFile fname backupFname
+      _ <- moveStoredFile fname backupFname
       fmap Right $ storeValue fname encStorage True
 
 loadStorageFromFile :: (MonadIO m, HasStoreDir m, PlatformNatives)
@@ -289,8 +291,8 @@ loadStorageFromFile login pass = do
   case storageResp of
     Left err -> pure $ Left $ SANativeAlert err
     Right storageText -> case decodeJson $ T.concat storageText of
-      Left err -> do
-        logWrite $ "Failed to decode wallet from: " <> fname <> "\nReading from backup: " <> backupFname
+      Left derr -> do
+        logWrite $ "Failed to decode wallet from: " <> fname <> "\nReading from backup: " <> backupFname <> ",\nError: " <> derr
         backupStorageResp <- readStoredFile backupFname
         case backupStorageResp of
             Left err -> pure $ Left $ SANativeAlert err

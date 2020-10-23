@@ -11,12 +11,12 @@ import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Time (NominalDiffTime)
-import Network.DNS
 import Network.Socket (SockAddr)
 import Reflex.Dom.Retractable
 import Reflex.ExternalRef
 
 import Ergvein.Types.Storage
+import Ergvein.Types.Network
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Log.Types
 import Ergvein.Wallet.Monad.Front
@@ -33,6 +33,7 @@ import qualified Data.Set as S
 
 data UnauthEnv t = UnauthEnv {
   unauth'settings        :: !(ExternalRef t Settings)
+, unauth'network         :: !NetworkType
 , unauth'pauseEF         :: !(Event t (), IO ())
 , unauth'resumeEF        :: !(Event t (), IO ())
 , unauth'backEF          :: !(Event t (), IO ())
@@ -51,8 +52,6 @@ data UnauthEnv t = UnauthEnv {
 , unauth'inactiveAddrs   :: !(ExternalRef t (S.Set NamedSockAddr))
 , unauth'activeAddrs     :: !(ExternalRef t (S.Set NamedSockAddr))
 , unauth'indexConmap     :: !(ExternalRef t (Map SockAddr (IndexerConnection t)))
-, unauth'reqUrlNum       :: !(ExternalRef t (Int, Int))
-, unauth'actUrlNum       :: !(ExternalRef t Int)
 , unauth'timeout         :: !(ExternalRef t NominalDiffTime)
 , unauth'indexReqSel     :: !(IndexReqSelector t)
 , unauth'indexReqFire    :: !(Map SockAddr IndexerMsg -> IO ())
@@ -84,6 +83,8 @@ instance MonadBaseConstr t m => MonadLocalized t (UnauthM t m) where
   {-# INLINE getLanguage #-}
 
 instance (MonadBaseConstr t m, MonadRetract t m, PlatformNatives, HasVersion) => MonadFrontBase t (UnauthM t m) where
+  getNetworkType = asks unauth'network
+  {-# INLINE getNetworkType #-}
   getLoadingWidgetTF = asks unauth'loading
   {-# INLINE getLoadingWidgetTF #-}
   getPauseEventFire = asks unauth'pauseEF
@@ -133,10 +134,6 @@ instance MonadBaseConstr t m => MonadIndexClient t (UnauthM t m) where
   {-# INLINE getActiveConnsRef #-}
   getInactiveAddrsRef = asks unauth'inactiveAddrs
   {-# INLINE getInactiveAddrsRef #-}
-  getActiveUrlsNumRef = asks unauth'actUrlNum
-  {-# INLINE getActiveUrlsNumRef #-}
-  getRequiredUrlNumRef = asks unauth'reqUrlNum
-  {-# INLINE getRequiredUrlNumRef #-}
   getRequestTimeoutRef = asks unauth'timeout
   {-# INLINE getRequestTimeoutRef #-}
   getIndexReqSelector = asks unauth'indexReqSel
@@ -146,7 +143,7 @@ instance MonadBaseConstr t m => MonadIndexClient t (UnauthM t m) where
   getActivationEF = asks unauth'activateIndexEF
   {-# INLINE getActivationEF #-}
 
-newEnv :: MonadBaseConstr t m
+newEnv :: MonadFrontBase t m
   => Settings
   -> Chan (IO ()) -- UI callbacks channel
   -> m (UnauthEnv t)
@@ -171,14 +168,13 @@ newEnv settings uiChan = do
   inactiveUrls    <- newExternalRef . S.fromList =<< parseSockAddrs rs (settingsDeactivatedAddrs settings)
   actvieAddrsRef  <- newExternalRef $ S.fromList socadrs
   indexConmapRef  <- newExternalRef $ M.empty
-  reqUrlNumRef    <- newExternalRef $ settingsReqUrlNum settings
-  actUrlNumRef    <- newExternalRef $ settingsActUrlNum settings
   timeoutRef      <- newExternalRef $ settingsReqTimeout settings
   (iReqE, iReqFire) <- newTriggerEvent
   let indexSel = fanMap iReqE -- Node request selector :: NodeReqSelector t
   indexEF <- newTriggerEvent
   let env = UnauthEnv {
           unauth'settings         = settingsRef
+        , unauth'network          = settingsNetwork settings
         , unauth'pauseEF          = (pauseE, pauseFire ())
         , unauth'resumeEF         = (resumeE, resumeFire ())
         , unauth'backEF           = (backE, backFire ())
@@ -196,8 +192,6 @@ newEnv settings uiChan = do
         , unauth'inactiveAddrs    = inactiveUrls
         , unauth'activeAddrs      = actvieAddrsRef
         , unauth'indexConmap      = indexConmapRef
-        , unauth'reqUrlNum        = reqUrlNumRef
-        , unauth'actUrlNum        = actUrlNumRef
         , unauth'timeout          = timeoutRef
         , unauth'indexReqSel      = indexSel
         , unauth'indexReqFire     = iReqFire

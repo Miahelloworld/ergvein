@@ -23,9 +23,7 @@ import Control.Concurrent.STM
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Data.ByteString (ByteString)
-import Data.Maybe
 import Data.Time
-import Ergvein.Text (showt)
 import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Util (widgetHoldDyn)
@@ -161,7 +159,6 @@ socket SocketConf{..} = fmap switchSocket $ widgetHoldDyn $ ffor _socketConfProx
   (readErE, readErFire) <- newTriggerEvent
   (inE, inFire) <- newTriggerEvent
   statusD <- holdDyn SocketInitial statusE
-  let doReconnecting = isJust _socketConfReopen
   reconnectE <- case _socketConfReopen of
     Just (dt, _) -> do
       let notFinalE = fforMaybe closeE $ \cr -> if isCloseFinal cr then Nothing else Just ()
@@ -326,6 +323,7 @@ fromSockAddr = \case
   N.SockAddrInet port haddr -> SocksAddress (SocksAddrIPV4 haddr) port
   N.SockAddrInet6 port _ haddr _ -> SocksAddress (SocksAddrIPV6 haddr) port
   N.SockAddrUnix _ -> error "fromSockAddr: not supported unix socket"
+  _ -> error "fromSockAddr: not supported address of socket"
 
 newSocket :: N.AddrInfo -> IO N.Socket
 newSocket addr = N.socket (N.addrFamily addr)

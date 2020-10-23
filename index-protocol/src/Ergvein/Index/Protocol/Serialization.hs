@@ -139,7 +139,7 @@ messageBuilder (MFiltersResponse FilterResponse {..}) =
   <> word32LE filtersCount
   <> lazyByteString zippedFilters
   where
-    (filtersSizeSum, filters) = mconcat $ blockFilterBuilder <$> V.toList filterResponseFilters
+    (_, filters) = mconcat $ blockFilterBuilder <$> V.toList filterResponseFilters
     filtersCount = fromIntegral $ V.length filterResponseFilters
     zippedFilters = compress $ toLazyByteString filters
 

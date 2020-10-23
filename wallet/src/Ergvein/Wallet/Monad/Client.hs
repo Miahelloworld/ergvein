@@ -26,17 +26,14 @@ import Control.Monad.Random
 import Data.Function (on)
 import Data.Functor.Misc (Const2(..))
 import Data.Map.Strict (Map)
-import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import Data.Text (Text)
 import Data.Time(NominalDiffTime, getCurrentTime, diffUTCTime)
 import Network.Socket (SockAddr)
 import Reflex
-import Reflex.Dom
 import Reflex.ExternalRef
 
 import Ergvein.Index.Protocol.Types (Message(..))
-import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Transaction
 import Ergvein.Wallet.Monad.Async
@@ -44,18 +41,17 @@ import Ergvein.Wallet.Monad.Prim
 import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Util
 
-import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 
 data IndexerConnection t = IndexerConnection {
-  indexConAddr :: !SockAddr
-, indexConName :: !Text
-, indexConClosedE :: !(Event t ())
-, indexConOpensE :: !(Event t ())
-, indexConIsUp :: !(Dynamic t Bool)
-, indexConRespE :: !(Event t Message)
-, indexerConHeight :: !(Dynamic t (Map Currency BlockHeight))
+  indexConAddr     :: !SockAddr
+, indexConName     :: !Text
+, indexConClosedE  :: !(Event t ())
+, indexConOpensE   :: !(Event t ())
+, indexConIsUp     :: !(Dynamic t Bool)
+, indexConRespE    :: !(Event t Message)
+, indexerConHeight :: !(Dynamic t (Map Coin BlockHeight))
 }
 
 data IndexerMsg = IndexerClose | IndexerRestart | IndexerMsg Message
@@ -75,10 +71,6 @@ class MonadBaseConstr t m => MonadIndexClient t m | m -> t where
   getActiveConnsRef :: m (ExternalRef t (Map SockAddr (IndexerConnection t)))
   -- | Get deactivated urls' reference. Internal
   getInactiveAddrsRef :: m (ExternalRef t (Set NamedSockAddr))
-  -- | Get reference to the minimal number of active urls. Internal
-  getActiveUrlsNumRef :: m (ExternalRef t Int)
-  -- | Get num reference. Internal
-  getRequiredUrlNumRef :: m (ExternalRef t (Int, Int))
   -- | Get request timeout ref
   getRequestTimeoutRef :: m (ExternalRef t NominalDiffTime)
   -- | Get indexer request event

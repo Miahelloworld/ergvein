@@ -53,6 +53,7 @@ import qualified Data.Vector as V
 data Env t = Env {
   -- Unauth context's fields
   env'settings        :: !(ExternalRef t Settings)
+, env'network         :: !NetworkType
 , env'pauseEF         :: !(Event t (), IO ())
 , env'resumeEF        :: !(Event t (), IO ())
 , env'backEF          :: !(Event t (), IO ())
@@ -84,8 +85,6 @@ data Env t = Env {
 , env'inactiveAddrs   :: !(ExternalRef t (S.Set NamedSockAddr))
 , env'activeAddrs     :: !(ExternalRef t (S.Set NamedSockAddr))
 , env'indexConmap     :: !(ExternalRef t (Map SockAddr (IndexerConnection t)))
-, env'reqUrlNum       :: !(ExternalRef t (Int, Int))
-, env'actUrlNum       :: !(ExternalRef t Int)
 , env'timeout         :: !(ExternalRef t NominalDiffTime)
 , env'indexReqSel     :: !(IndexReqSelector t)
 , env'indexReqFire    :: !(Map SockAddr IndexerMsg -> IO ())
@@ -123,6 +122,8 @@ instance MonadBaseConstr t m => MonadLocalized t (ErgveinM t m) where
   {-# INLINE getLanguage #-}
 
 instance (MonadBaseConstr t m, MonadRetract t m, PlatformNatives, HasVersion) => MonadFrontBase t (ErgveinM t m) where
+  getNetworkType = asks env'network
+  {-# INLINE getNetworkType #-}
   getLoadingWidgetTF = asks env'loading
   {-# INLINE getLoadingWidgetTF #-}
   getPauseEventFire = asks env'pauseEF
@@ -188,10 +189,6 @@ instance MonadBaseConstr t m => MonadIndexClient t (ErgveinM t m) where
   {-# INLINE getActiveConnsRef #-}
   getInactiveAddrsRef = asks env'inactiveAddrs
   {-# INLINE getInactiveAddrsRef #-}
-  getActiveUrlsNumRef = asks env'actUrlNum
-  {-# INLINE getActiveUrlsNumRef #-}
-  getRequiredUrlNumRef = asks env'reqUrlNum
-  {-# INLINE getRequiredUrlNumRef #-}
   getRequestTimeoutRef = asks env'timeout
   {-# INLINE getRequestTimeoutRef #-}
   getIndexReqSelector = asks env'indexReqSel
@@ -220,10 +217,9 @@ instance (MonadBaseConstr t m, HasStoreDir m) => MonadStorage t (ErgveinM t m) w
     case mXPubKey of
       Nothing -> fail "NOT IMPLEMENTED" -- TODO: generate new address here
       Just (EgvPubKeyBox key _ _) ->
-        let k = case key of
-              ErgXPubKey k' _ -> k'
-              BtcXPubKey k' _ -> k'
-        in pure $ xPubExport (getCurrencyNetwork cur) k
+        let k = egvXPubKey key
+            net = egvXPubNetwork key
+        in pure $ xPubExport net k
   {-# INLINE getAddressByCurIx #-}
   getWalletName = fmap (_storage'walletName . _authInfo'storage) $ readExternalRef =<< asks env'authRef
   {-# INLINE getWalletName #-}
@@ -296,8 +292,6 @@ liftAuth ma0 ma = mdo
         inactiveUrls    <- getInactiveAddrsRef
         actvieAddrsRef  <- getActiveAddrsRef
         indexConmapRef  <- getActiveConnsRef
-        reqUrlNumRef    <- getRequiredUrlNumRef
-        actUrlNumRef    <- getActiveUrlsNumRef
         timeoutRef      <- getRequestTimeoutRef
         iReqFire        <- getIndexReqFire
         indexSel        <- getIndexReqSelector  -- Node request selector :: NodeReqSelector t
@@ -321,6 +315,7 @@ liftAuth ma0 ma = mdo
         storeMvar       <- liftIO $ newMVar ()
         let env = Env {
                 env'settings = settingsRef
+              , env'network = settingsNetwork settings
               , env'pauseEF = pauseEF
               , env'resumeEF = resumeEF
               , env'backEF = backEF
@@ -351,8 +346,6 @@ liftAuth ma0 ma = mdo
               , env'inactiveAddrs = inactiveUrls
               , env'activeAddrs = actvieAddrsRef
               , env'indexConmap = indexConmapRef
-              , env'reqUrlNum = reqUrlNumRef
-              , env'actUrlNum = actUrlNumRef
               , env'timeout = timeoutRef
               , env'indexReqSel = indexSel
               , env'indexReqFire = iReqFire

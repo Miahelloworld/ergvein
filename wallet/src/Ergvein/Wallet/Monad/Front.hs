@@ -58,6 +58,7 @@ import Ergvein.Index.Protocol.Types (Message(..))
 import Ergvein.Types.AuthInfo
 import Ergvein.Types.Currency
 import Ergvein.Types.Fees
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Filters.Storage
 import Ergvein.Wallet.Monad.Async
@@ -168,7 +169,7 @@ getSyncProgress cur = do
 {-# INLINE getSyncProgress #-}
 
 -- | Set global sync process value each time the event is fired
-setSyncProgress :: MonadFrontAuth t m => Event t (SyncProgress) -> m ()
+setSyncProgress :: MonadFrontAuth t m => Event t SyncProgress -> m ()
 setSyncProgress spE = do
   syncProgRef <- getSyncProgressRef
   performEvent_ $ ffor spE $ \(SyncProgress cur sp) -> do
@@ -257,7 +258,7 @@ requester cur req = mdo
     case mconn of
       Nothing -> pure never
       Just conn -> do
-        requestIndexerWhenOpen conn req
+        _ <- requestIndexerWhenOpen conn req
         pure $ (indexConAddr conn,) <$> indexConRespE conn
   pure respE
   where
@@ -266,13 +267,14 @@ requester cur req = mdo
 -- | Designed to be used inside a widgetHold, samples dynamics
 getOpenSyncedConns :: MonadFront t m => Currency -> m [IndexerConnection t]
 getOpenSyncedConns cur = do
+  net <- getNetworkType
   conns <- readExternalRef =<< getActiveConnsRef
   heights <- readExternalRef =<< getHeightRef
   let mh = M.lookup cur heights
   fmap catMaybes $ flip traverse (M.elems conns) $ \con -> do
     isUp <- sampleDyn $ indexConIsUp con
     if not isUp then pure Nothing else do
-      mh' <- fmap (M.lookup cur) $ sampleDyn $ indexerConHeight con
+      mh' <- fmap (M.lookup $ coinByNetwork cur net) $ sampleDyn $ indexerConHeight con
       pure $ case (mh, fromIntegral <$> mh') of
         (Just h, Just h') -> if h == h' || h - h' == 1 then Just con else Nothing
         _ -> Nothing

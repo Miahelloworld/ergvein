@@ -9,9 +9,10 @@ import Data.Maybe
 import Network.Haskoin.Block
 import Network.Haskoin.Network
 
-import Ergvein.Wallet.Platform
 import Ergvein.Text
 import Ergvein.Types.Currency
+import Ergvein.Types.Headers
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Monad.Front
 import Ergvein.Wallet.Monad.Storage
@@ -36,7 +37,7 @@ heightAsking = void . widgetHoldDyn . fmap (traverse_ heightAsker) =<< getActive
 
 heightAsker :: (MonadFront t m) => Currency -> m ()
 heightAsker cur = case cur of
-  BTC -> heightAskerBtc
+  Bitcoin -> heightAskerBtc
   _ -> pure ()
 
 -- | Height asker is implemented via three workflows:
@@ -56,12 +57,13 @@ heightAskerBtc = do
 -- | BTC workflow starter. Picks the last block locator and starts the btcCatchUpFlow
 startBTCFlow :: MonadFront t m => Workflow t m ()
 startBTCFlow = Workflow $ do
+  net <- getNetworkType
   buildE <- getPostBuild
   ps <- getPubStorage
   let bl0 = ps ^. pubStorage'currencyPubStorages
-        . at BTC . non (error "bctNodeController: not exsisting store!")
+        . at Bitcoin . non (error "bctNodeController: not exsisting store!")
         . currencyPubStorage'headerSeq
-      bl = fmap V.toList $ if V.null $ snd bl0 then btcCheckpoints else bl0
+      bl = fmap V.toList $ if V.null $ snd bl0 then headerCheckpoints (coinByNetwork Bitcoin net) else bl0
   pure ((), btcCatchUpFlow bl <$ buildE)
 
 -- | Requests block headers exhaustively until it catches up with the chain head
@@ -72,7 +74,7 @@ btcCatchUpFlow (ts, bl) = Workflow $ do
   logWrite $ "btcCatchUpFlow: " <> showt h0
   buildE <- getPostBuild
   storedE <-  attachNewBtcHeader "btcCatchUpFlow" False $ (h0, ts, lasthash) <$ buildE
-  setSyncProgress $ SyncProgress BTC (SyncGettingHeight $ fromIntegral h0) <$ storedE
+  setSyncProgress $ SyncProgress Bitcoin (SyncGettingHeight $ fromIntegral h0) <$ storedE
   let req = MGetHeaders $ GetHeaders 70012 (snd <$> bl) emptyHash
   respE <- requestRandomNode $ (NodeReqBTC req) <$ storedE
   let hlE = fforMaybe respE $ \case
@@ -113,7 +115,7 @@ btcListenFlow h0 ts0 he0 = Workflow $ mdo
       reqE = poke bhE $ \bh -> do
         (_, _, ha) <- sampleDyn htD
         pure $ NodeMsgReq $ NodeReqBTC $ MGetHeaders $ GetHeaders 70012 [ha] bh
-  broadcastNodeMessage BTC reqE
+  broadcastNodeMessage Bitcoin reqE
   let hlE = fforMaybe respE $ \case
         MHeaders (Headers hl) -> case hl of
           [] -> Nothing

@@ -9,11 +9,10 @@ module Ergvein.Wallet.Filters.Btc.Types(
 
 import Data.ByteString
 import Database.LMDB.Simple
-import Ergvein.Types.Transaction
-
 import Ergvein.Types.Currency
+import Ergvein.Types.Headers
+import Ergvein.Types.Transaction
 import Ergvein.Wallet.Codec()
-import Ergvein.Wallet.Platform
 
 filtersDbName :: String
 filtersDbName = "btcfilters"

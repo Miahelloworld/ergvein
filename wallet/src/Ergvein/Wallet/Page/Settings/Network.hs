@@ -8,18 +8,13 @@ module Ergvein.Wallet.Page.Settings.Network
 
 import Control.Lens
 import Data.Functor.Misc (Const2(..))
-import Data.Maybe (isJust)
-import Network.Socket
 import Reflex.Dom
 import Reflex.ExternalRef
-import Text.Read
 
-import Ergvein.Text
 import Ergvein.Types.Currency
-import Ergvein.Wallet.Alert
+import Ergvein.Types.Network
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Indexer.Socket
-import Ergvein.Wallet.Elements.Input
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Localization.Settings
 import Ergvein.Wallet.Localization.Network
@@ -28,10 +23,9 @@ import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Map.Strict as M
-import qualified Data.Text as T
 import qualified Data.Set as S
 
-data NavbarItem = ActivePage | DisabledPage | ParametersPage
+data NavbarItem = ActivePage | DisabledPage
   deriving (Eq)
 
 instance LocalizedPrint NavbarItem where
@@ -39,11 +33,9 @@ instance LocalizedPrint NavbarItem where
     English -> case v of
       ActivePage      -> "Active indexers"
       DisabledPage    -> "Reserved indexers"
-      ParametersPage  -> "Network parameters"
     Russian -> case v of
       ActivePage      -> "Используемые индексеры"
       DisabledPage    -> "Запасные индексеры"
-      ParametersPage  -> "Сетевые параметры"
 
 data ParametersParseErrors = PPENDT | PPEInt
 
@@ -64,7 +56,6 @@ networkSettingsPage = do
     void $ widgetHoldDyn $ ffor navD $ \case
       ActivePage      -> activePageWidget
       DisabledPage    -> inactivePageWidget
-      ParametersPage  -> parametersPageWidget
 
 networkSettingsPageUnauth :: MonadFrontBase t m => m ()
 networkSettingsPageUnauth = wrapperSimple False $ do
@@ -72,45 +63,6 @@ networkSettingsPageUnauth = wrapperSimple False $ do
   void $ widgetHoldDyn $ ffor navD $ \case
     ActivePage      -> activePageWidget
     DisabledPage    -> inactivePageWidget
-    ParametersPage  -> parametersPageWidget
-
-parametersPageWidget :: MonadFrontBase t m => m ()
-parametersPageWidget = mdo
-  setD <- getSettingsD
-  valsD <- fmap join $
-    widgetHoldDyn $ ffor setD $ \Settings{..} -> do
-      let dt0 :: Double = realToFrac settingsReqTimeout
-      dtD <- fmap2 realToFrac $ textFieldValidated NSSReqTimeout dt0 $
-        maybe (Left [PPENDT]) Right . readMaybe . T.unpack
-      actNumD <- textFieldValidated NSSActUrlNum settingsActUrlNum $
-        maybe (Left [PPEInt]) Right . readMaybe . T.unpack
-      rminD <- textFieldValidated NSSReqNumMin (fst settingsReqUrlNum) $
-        maybe (Left [PPEInt]) Right . readMaybe . T.unpack
-      rmaxD <- textFieldValidated NSSReqNumMax (snd settingsReqUrlNum) $
-        maybe (Left [PPEInt]) Right . readMaybe . T.unpack
-      pure $ (,,,) <$> dtD <*> actNumD <*> rminD <*> rmaxD
-  divClass "net-btns-2" $ do
-    saveE <- buttonClass "button button-outline" NSSSave
-    defE <- buttonClass "button button-outline" NSSRestoreDef
-    updE <- updateSettings $ flip pushAlways defE $ const $ do
-      stngs <- sample $ current setD
-      pure $ stngs {
-            settingsReqTimeout = defaultIndexerTimeout
-          , settingsReqUrlNum  = defaultIndexersNum
-          , settingsActUrlNum  = defaultActUrlNum
-        }
-    updE' <- updateSettings $ flip pushAlways saveE $ const $ do
-      stngs <- sample $ current setD
-      (dt, actNum, rmin, rmax) <- sample $ current valsD
-      pure $ stngs {
-            settingsReqTimeout = dt
-          , settingsReqUrlNum  = (rmin, rmax)
-          , settingsActUrlNum  = actNum
-        }
-    showSuccessMsg $ STPSSuccess <$ (leftmost [updE, updE'])
-  pure ()
-  where
-    fmap2 = fmap . fmap
 
 addUrlWidget :: forall t m . MonadFrontBase t m => Dynamic t Bool -> m (Event t NamedSockAddr)
 addUrlWidget showD = fmap switchDyn $ widgetHoldDyn $ ffor showD $ \b -> if not b then pure never else do
@@ -159,17 +111,18 @@ renderActive nsa refrE mconn = mdo
 
   tglE <- divClass "network-wrapper mt-3" $ case mconn of
     Nothing -> do
-      tglE <- divClass "network-name" $ do
+      e <- divClass "network-name" $ do
         elAttr "span" offclass $ elClass "i" "fas fa-circle" $ pure ()
         divClass "mt-a mb-a network-name-txt" $ text $ namedAddrName nsa
         editBtn
       descrOption NSSOffline
-      pure tglE
+      pure e
     Just conn -> do
+      net <- getNetworkType
       let clsUnauthD = ffor (indexConIsUp conn) $ \up -> if up then onclass else offclass
-      let heightD = fmap (M.lookup BTC) $ indexerConHeight conn
+      let heightD = fmap (M.lookup $ coinByNetwork Bitcoin net) $ indexerConHeight conn
       clsD <- fmap join $ liftAuth (pure clsUnauthD) $ do
-        hD <- getCurrentHeight BTC
+        hD <- getCurrentHeight Bitcoin
         pure $ do
           h <- heightD
           h' <- fmap (Just . fromIntegral) hD
@@ -178,14 +131,14 @@ renderActive nsa refrE mconn = mdo
           pure $ if up
             then if synced then onclass else unsyncClass
             else offclass
-      tglE <- divClass "network-name" $ do
+      e <- divClass "network-name" $ do
         elDynAttr "span" clsD $ elClass "i" "fas fa-circle" $ pure ()
         divClass "mt-a mb-a network-name-txt" $ text $ namedAddrName nsa
         editBtn
       latD <- indexerConnPingerWidget conn refrE
       descrOptionDyn $ NSSLatency <$> latD
       descrOptionDyn $ (maybe NSSNoHeight NSSIndexerHeight) <$> heightD
-      pure tglE
+      pure e
 
   void $ widgetHoldDyn $ ffor tglD $ \b -> if not b
     then pure ()
@@ -252,7 +205,7 @@ renderInactive initPingE nsa = mdo
 navbarWidget :: MonadFrontBase t m => NavbarItem -> m (Dynamic t NavbarItem)
 navbarWidget initItem = divClass "navbar" $ mdo
   selD <- holdDyn initItem selE
-  selE <- fmap leftmost $ flip traverse [ActivePage, DisabledPage, ParametersPage] $ \i -> do
+  selE <- fmap leftmost $ flip traverse [ActivePage, DisabledPage] $ \i -> do
     let attrD = (\ai -> "navbar-item" <> if i == ai then " active" else "") <$> selD
     pure . (<$) i =<< spanButton attrD i
   pure selD
@@ -262,6 +215,3 @@ descrOption = divClass "network-descr" . localizedText
 
 descrOptionDyn :: (MonadFrontBase t m, LocalizedPrint a) => Dynamic t a -> m ()
 descrOptionDyn v = getLanguage >>= \langD -> divClass "network-descr" $ dynText $ ffor2 langD v localizedShow
-
-elBR :: MonadFrontBase t m => m ()
-elBR = el "br" blank

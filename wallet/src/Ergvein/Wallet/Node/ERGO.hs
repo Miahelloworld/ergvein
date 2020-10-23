@@ -17,10 +17,11 @@ import Reflex
 import Reflex.ExternalRef
 
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Wallet.Node.Prim
 
 instance CurrencyRep ERGOType where
-  curRep _ = ERGO
+  curRep _ = Ergo
 
 -- | TODO: Change this once actual connection is implemented
 instance HasNode ERGOType where
@@ -28,11 +29,12 @@ instance HasNode ERGOType where
   type NodeResp ERGOType = Text
   type NodeSpecific ERGOType = ()
 
-initErgoNode :: (Reflex t, TriggerEvent t m, MonadIO m) => SockAddr -> Event t NodeMessage -> m (NodeERG t)
-initErgoNode url _ = do
+initErgoNode :: (Reflex t, TriggerEvent t m, MonadIO m) => NetworkType -> SockAddr -> Event t NodeMessage -> m (NodeERG t)
+initErgoNode netType url _ = do
   statRef <- newExternalRef Nothing
   pure $ NodeConnection {
-      nodeconCurrency   = ERGO
+      nodeconCurrency   = Ergo
+    , nodeconNetwork    = netType
     , nodeconUrl        = url
     , nodeconStatus     = statRef
     , nodeconOpensE     = never

@@ -23,6 +23,7 @@ import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Types.Derive
 import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Transaction
 import Ergvein.Types.Utxo
 
@@ -36,8 +37,8 @@ type Password = Text
 
 data CurrencyPrvStorage = CurrencyPrvStorage {
     _currencyPrvStorage'prvKeystore :: !PrvKeystore
-  , _currencyPrvStorage'path        :: !(Maybe DerivPrefix)
-  } deriving (Eq, Show, Read)
+  , _currencyPrvStorage'path        :: !DerivPrefix
+  } deriving (Eq, Show)
 
 makeLenses ''CurrencyPrvStorage
 
@@ -46,11 +47,12 @@ $(deriveJSON aesonOptionsStripToApostroph ''CurrencyPrvStorage)
 type CurrencyPrvStorages = M.Map Currency CurrencyPrvStorage
 
 data PrvStorage = PrvStorage {
-    _prvStorage'mnemonic            :: Mnemonic
-  , _prvStorage'rootPrvKey          :: EgvRootXPrvKey
-  , _prvStorage'currencyPrvStorages :: CurrencyPrvStorages
-  , _prvStorage'pathPrefix          :: !(Maybe DerivPrefix)
-  } deriving (Eq, Show, Read)
+    _prvStorage'mnemonic            :: !Mnemonic
+  , _prvStorage'rootPrvKey          :: !EgvRootXPrvKey
+  , _prvStorage'currencyPrvStorages :: !CurrencyPrvStorages
+  , _prvStorage'pathPrefix          :: !DerivPrefix
+  , _prvStorage'network             :: !NetworkType
+  } deriving (Eq, Show)
 
 makeLenses ''PrvStorage
 
@@ -60,6 +62,7 @@ instance ToJSON PrvStorage where
     , "rootPrvKey"          .= toJSON _prvStorage'rootPrvKey
     , "currencyPrvStorages" .= toJSON _prvStorage'currencyPrvStorages
     , "pathPrefix"          .= toJSON _prvStorage'pathPrefix
+    , "network"             .= toJSON _prvStorage'network
     ]
 
 instance FromJSON PrvStorage where
@@ -67,7 +70,8 @@ instance FromJSON PrvStorage where
     <$> o .: "mnemonic"
     <*> o .: "rootPrvKey"
     <*> o .: "currencyPrvStorages"
-    <*> o .:? "pathPrefix" .!= Just legacyDerivPathPrefix
+    <*> o .: "pathPrefix" .!= defaultDerivPathPrefix
+    <*> o .: "network"    .!= Mainnet
 
 data EncryptedPrvStorage = EncryptedPrvStorage {
     _encryptedPrvStorage'ciphertext :: ByteString
@@ -95,7 +99,7 @@ instance FromJSON EncryptedPrvStorage where
 
 data CurrencyPubStorage = CurrencyPubStorage {
     _currencyPubStorage'pubKeystore   :: !PubKeystore
-  , _currencyPubStorage'path          :: !(Maybe DerivPrefix)
+  , _currencyPubStorage'path          :: !DerivPrefix
   , _currencyPubStorage'transactions  :: !(M.Map TxId EgvTx)
   , _currencyPubStorage'height        :: !(Maybe BlockHeight)     -- ^ Last height seen by the wallet
   , _currencyPubStorage'scannedKey    :: !(Maybe Int, Maybe Int)  -- ^ When restoring here we put which keys are we already scanned
@@ -104,7 +108,7 @@ data CurrencyPubStorage = CurrencyPubStorage {
   , _currencyPubStorage'headers       :: !(M.Map HB.BlockHash HB.BlockHeader)
   , _currencyPubStorage'outgoing      :: !(S.Set TxId)
   , _currencyPubStorage'headerSeq     :: !(Word32, V.Vector (HB.BlockHeight, HB.BlockHash))
-  } deriving (Eq, Show, Read)
+  } deriving (Eq, Show)
 
 makeLenses ''CurrencyPubStorage
 
@@ -120,8 +124,9 @@ data PubStorage = PubStorage {
   , _pubStorage'currencyPubStorages :: !CurrencyPubStorages
   , _pubStorage'activeCurrencies    :: [Currency]
   , _pubStorage'restoring           :: !Bool -- ^ Flag to track unfinished process of restoration
-  , _pubStorage'pathPrefix          :: !(Maybe DerivPrefix)
-  } deriving (Eq, Show, Read)
+  , _pubStorage'pathPrefix          :: !DerivPrefix
+  , _pubStorage'network             :: !NetworkType
+  } deriving (Eq, Show)
 
 makeLenses ''PubStorage
 

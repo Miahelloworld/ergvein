@@ -15,13 +15,11 @@ import Data.Foldable (traverse_)
 import Data.Maybe
 import Database.LMDB.Simple
 import Database.LMDB.Simple.Extra
-import Ergvein.Types.Transaction
-
 import Ergvein.Filters.Btc.Mutable
-import Ergvein.Text
 import Ergvein.Types.Currency
+import Ergvein.Types.Headers
+import Ergvein.Types.Transaction
 import Ergvein.Wallet.Filters.Btc.Types
-import Ergvein.Wallet.Platform
 
 import qualified Database.LMDB.Simple.Extra as LMDB
 

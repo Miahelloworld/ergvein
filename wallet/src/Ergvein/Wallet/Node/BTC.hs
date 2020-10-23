@@ -29,37 +29,35 @@ import qualified Data.ByteString as B
 import qualified Data.Text.Encoding as TE
 
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Monad.Prim
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Node.Prim
 import Ergvein.Wallet.Node.Socket
-import Ergvein.Wallet.Platform
-import Ergvein.Wallet.Settings
 
 -- These two are for dummy stats
 import Control.Monad.Random
 import Ergvein.Text
 
 instance CurrencyRep BTCType where
-  curRep _ = BTC
+  curRep _ = Bitcoin
 
 instance HasNode BTCType where
   type NodeReq BTCType = Message
   type NodeResp BTCType = Message
   type NodeSpecific BTCType = ()
 
-initBTCNode :: (MonadBaseConstr t m, MonadHasSettings t m) => Bool -> SockAddr -> Event t NodeMessage -> m (NodeBTC t)
-initBTCNode doLog sa msgE = do
+initBTCNode :: (MonadBaseConstr t m, MonadHasSettings t m) => NetworkType -> Bool -> SockAddr -> Event t NodeMessage -> m (NodeBTC t)
+initBTCNode netType doLog sa msgE = do
   -- Dummy status TODO: Make status real later
   b  <- liftIO randomIO
   d :: Double <- liftIO $ randomRIO (0, 1.5)
   bh <- liftIO randomIO
   let nstat = if b then Nothing else Just $ NodeStatus bh (realToFrac d)
-
-  let net = btcNetwork
+      net = bitcoinNetwork netType
       nodeLog :: MonadIO m => Text -> m ()
-      nodeLog = if doLog then logWrite . (nodeString BTC sa <>) else const (pure ())
+      nodeLog = if doLog then logWrite . (nodeString Bitcoin sa <>) else const (pure ())
 
   let restartE = fforMaybe msgE $ \case
         NodeMsgRestart -> Just ()
@@ -116,7 +114,8 @@ initBTCNode doLog sa msgE = do
   let openE = fmapMaybe (\o -> if o then Just () else Nothing) $ updated shakeD
       closedE = () <$ _socketClosed s
   pure $ NodeConnection {
-    nodeconCurrency   = BTC
+    nodeconCurrency   = Bitcoin
+  , nodeconNetwork    = netType
   , nodeconUrl        = sa
   , nodeconStatus     = statRef
   , nodeconOpensE     = openE
@@ -153,7 +152,7 @@ peekMessage net url = do
       if len == 0 then parseMessage x else do
         y <- peek (fromIntegral len)
         parseMessage $ x `B.append` y
-  where nodeLog = logWrite . (nodeString BTC url <>)
+  where nodeLog = logWrite . (nodeString Bitcoin url <>)
 
 -- | Create version data message
 mkVers :: MonadIO m => Network -> SockAddr -> m Message

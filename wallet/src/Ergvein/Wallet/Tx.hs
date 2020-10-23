@@ -17,20 +17,17 @@ import Network.Haskoin.Transaction (Tx(..), TxIn(..), TxOut(..), OutPoint(..), t
 
 import Ergvein.Text
 import Ergvein.Types.Address
-import Ergvein.Types.Derive
 import Ergvein.Types.Keys
 import Ergvein.Types.Transaction
 import Ergvein.Types.Utxo
 import Ergvein.Wallet.Monad.Storage
 import Ergvein.Wallet.Native
-import Ergvein.Wallet.Node.BTC.Blocks
 
 import qualified Data.Map.Strict                    as M
 import qualified Data.Vector                        as V
 import qualified Network.Haskoin.Address            as HA
 import qualified Network.Haskoin.Script             as HS
 import qualified Network.Haskoin.Transaction        as HT
-import qualified Network.Haskoin.Crypto             as HT
 
 -- | Filter txs for ones, relevant to an address
 filterTxsForAddress :: (HasTxStorage m, PlatformNatives) => EgvAddress -> [Tx] -> m [Tx]
@@ -81,7 +78,7 @@ getUnspentOutputs c ScanKeyBox{..} tx = fmap catMaybes $ flip traverse (zip [0..
   where
     th = txHash tx
     stat = maybe (EUtxoReceiving Nothing) EUtxoSemiConfirmed c
-    addr = egvXPubKeyToEgvAddress scanBox'key
+    addr = egvXPubKeyAddress scanBox'key
 
 -- | Construct UTXO update for a list of addresses based on a transaction
 -- Maybe BlockHeight: Nothing -- unconfirmed Tx. Just n -> confirmed at height n
@@ -89,7 +86,7 @@ getUtxoUpdates :: (HasTxStorage m, PlatformNatives)
   => Maybe BlockHeight -> V.Vector ScanKeyBox -> Tx -> m BtcUtxoUpdate
 getUtxoUpdates mheight boxes tx = do
   (unsps, sps) <- fmap V.unzip $ flip traverse boxes $ \box -> do
-    let addr = egvXPubKeyToEgvAddress $ scanBox'key box
+    let addr = egvXPubKeyAddress $ scanBox'key box
     unsp <- getUnspentOutputs mheight box tx
     sp   <- getSpentOutputs isConfirmed addr tx
     pure (unsp, sp)
@@ -110,7 +107,7 @@ getUtxoUpdatesFromTxs mheight box txs = do
   pure (unspentMap, mconcat sps)
   where
     isConfirmed = maybe False (const True) mheight
-    addr = egvXPubKeyToEgvAddress $ scanBox'key box
+    addr = egvXPubKeyAddress $ scanBox'key box
 
 -- | Checks given TxIn wheather it contains given address.
 -- Native SegWit addresses are not presented in TxIns scriptSig.
@@ -132,14 +129,14 @@ checkTxIn addr txIn = do
 --           (BtcAddress (HA.ScriptAddress _)) _
 --           (ErgAddress _) _
 checkTxOut :: (MonadIO m, PlatformNatives) => EgvAddress -> TxOut -> m Bool
-checkTxOut (BtcAddress (HA.WitnessPubKeyAddress pkh)) txO = case HS.decodeOutputBS $ HT.scriptOutput txO of
+checkTxOut (BtcAddress (HA.WitnessPubKeyAddress pkh) _) txO = case HS.decodeOutputBS $ HT.scriptOutput txO of
   Left e -> do
     logWrite $ "Could not decode transaction output " <> (showt e)
     pure False
   Right output -> case output of
     HS.PayWitnessPKHash h -> if h == pkh then pure True else pure False
     _ -> pure False
-checkTxOut (BtcAddress (HA.WitnessScriptAddress sh)) txO = case HS.decodeOutputBS $ HT.scriptOutput txO of
+checkTxOut (BtcAddress (HA.WitnessScriptAddress sh) _) txO = case HS.decodeOutputBS $ HT.scriptOutput txO of
   Left e -> do
     logWrite $ "Could not decode transaction output " <> (showt e)
     pure False

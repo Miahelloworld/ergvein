@@ -26,31 +26,33 @@ module Ergvein.Types.Transaction (
     , setEgvTxMeta
   ) where
 
+import Control.DeepSeq
+import Control.Monad ((<=<))
 import Data.Aeson as A
 import Data.Aeson.Types (Parser)
 import Data.ByteString (ByteString)
 import Data.ByteString.Short (ShortByteString)
-import Control.DeepSeq
-import Control.Monad ((<=<))
 import Data.Either
+import Data.Flat
+import Data.Hashable           (Hashable)
+import Data.Serialize              as S
+import Data.String
+import Data.String.Conversions (cs)
 import Data.Text as T
 import Data.Time
-import Data.Flat
 import Data.Word
-import Network.Haskoin.Crypto (getHash256)
-import           Data.Hashable           (Hashable)
-import           GHC.Generics            (Generic)
-import qualified Data.ByteString.Short   as BSS
-import           Text.Read               as R
-import           Data.String.Conversions (cs)
 import Ergvein.Aeson
 import Ergvein.Crypto.Util
 import Ergvein.Text
 import Ergvein.Types.Currency
+import GHC.Generics            (Generic)
+import Network.Haskoin.Crypto (getHash256)
+import Text.Read               as R
 
-import           Data.Serialize              as S
+import qualified Data.ByteString.Short   as BSS
 import qualified Network.Haskoin.Block as HB
 import qualified Network.Haskoin.Transaction as HK
+import qualified Codec.Serialise.Class as CS
 
 type BtcTx = HK.Tx
 
@@ -89,16 +91,16 @@ egvTxId (ErgTx _ _) = error "egvTxId: implement for Ergo!"
 
 egvTxCurrency :: EgvTx -> Currency
 egvTxCurrency e = case e of
-  BtcTx{} -> BTC
-  ErgTx{} -> ERGO
+  BtcTx{} -> Bitcoin
+  ErgTx{} -> Ergo
 
 egvTxFromJSON :: Currency -> Value -> Parser EgvTx
 egvTxFromJSON cur = case cur of
-  BTC -> withText "Bitcoin transaction" $ \t ->
+  Bitcoin -> withText "Bitcoin transaction" $ \t ->
     case btcTxFromString t of
       Nothing -> fail "could not decode Bitcoin transaction"
       Just x  -> return $ BtcTx x Nothing
-  ERGO -> withText "Ergo transaction" $ \t ->
+  Ergo -> withText "Ergo transaction" $ \t ->
     case ergTxFromString t of
       Nothing -> fail "could not decode Ergo transaction"
       Just x  -> return $ ErgTx x Nothing
@@ -141,7 +143,7 @@ type BlockHeight = Word64
 
 -- | Hash of block (usually header only) that identifies block.
 newtype BlockHash = BlockHash { getBlockHash :: ShortByteString }
-  deriving (Eq, Ord, Hashable, Generic, Flat, Serialize, NFData)
+  deriving (Eq, Ord, Hashable, Generic, Flat, Serialize, CS.Serialise, NFData)
 
 instance Show BlockHash where
     showsPrec _ = shows . encodeHex . BSS.fromShort . getBlockHash
@@ -159,6 +161,9 @@ instance FromJSON BlockHash where
 instance ToJSON BlockHash where
   toJSON = A.String . bs2Hex . BSS.fromShort . getBlockHash
   {-# INLINE toJSON #-}
+
+instance IsString BlockHash where
+  fromString s = either (error $ "Failed to parse BlockHash " <> s) (BlockHash . BSS.toShort) . hex2bsTE . T.pack $ s
 
 -- | Index of the transaction in block
 type TxBlockIndex = Word
@@ -209,8 +214,9 @@ type TxOutIndex = Word
 
 -- | index of the first block in blockchain
 currencyHeightStart :: Currency -> BlockHeight
-currencyHeightStart = \case BTC  -> 0
-                            ERGO -> 1
+currencyHeightStart c = case c of
+  Bitcoin -> 0
+  Ergo    -> 1
 {-# INLINE currencyHeightStart #-}
 
 data EgvTxMeta = EgvTxMeta {

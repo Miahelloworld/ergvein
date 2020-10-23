@@ -3,10 +3,9 @@ module Ergvein.Wallet.Page.Network(
     networkPage
   ) where
 
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe
 import Reflex.ExternalRef
 
-import Ergvein.Text
 import Ergvein.Types.Currency
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
@@ -14,7 +13,6 @@ import Ergvein.Wallet.Localization.Currency()
 import Ergvein.Wallet.Localization.Network
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Node
-import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Dependent.Map as DM
@@ -49,8 +47,8 @@ networkPageWidget cur refrE = do
     pure listE
   -- lineOption $ lineOptionNoEdit NPSSyncStatus servCurInfoD NPSSyncDescr
   void $ lineOption $ widgetHoldDyn $ ffor conmapD $ \cm -> case cur of
-    BTC  -> btcNetworkWidget $ maybe [] M.elems $ DM.lookup BTCTag cm
-    ERGO -> ergNetworkWidget $ maybe [] M.elems $ DM.lookup ERGOTag cm
+    Bitcoin  -> btcNetworkWidget $ maybe [] M.elems $ DM.lookup BTCTag cm
+    Ergo -> ergNetworkWidget $ maybe [] M.elems $ DM.lookup ERGOTag cm
   void $ nextWidget $ ffor listE $ \с -> Retractable {
       retractableNext = serversInfoPage с
     , retractablePrev = Just (pure $ networkPage (Just с))

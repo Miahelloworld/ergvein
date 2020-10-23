@@ -22,8 +22,10 @@ import Ergvein.Index.Protocol.Deserialization
 import Ergvein.Index.Protocol.Serialization
 import Ergvein.Index.Protocol.Types
 import Ergvein.Text
+import Ergvein.Types.Network
 import Ergvein.Wallet.Monad.Client
 import Ergvein.Wallet.Monad.Prim
+import Ergvein.Wallet.Monad.Base
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Node.Socket
 import Ergvein.Wallet.Settings
@@ -36,7 +38,7 @@ import qualified Data.ByteString.Lazy       as BL
 import qualified Data.Map.Strict            as M
 import qualified Data.Vector.Unboxed        as VU
 
-initIndexerConnection :: (MonadBaseConstr t m, MonadHasSettings t m) => NamedSockAddr -> Event t IndexerMsg ->  m (IndexerConnection t)
+initIndexerConnection :: MonadFrontBase t m => NamedSockAddr -> Event t IndexerMsg ->  m (IndexerConnection t)
 initIndexerConnection (NamedSockAddr sname sa) msgE = mdo
   (msname, msport) <- liftIO $ getNameInfo [NI_NUMERICHOST, NI_NUMERICSERV] True True sa
   let peer = fromJust $ Peer <$> msname <*> msport
@@ -79,15 +81,16 @@ initIndexerConnection (NamedSockAddr sname sa) msgE = mdo
 
   -- Track filters height
 
-
+  net <- getNetworkType
   performEvent $ ffor respE $ \case
     MVersion v -> logWrite . showt $ v
     _ -> pure ()
   let setHE = fforMaybe respE $ \case
-        MVersion Version{..} -> Just $ M.fromList $ ffor (VU.toList versionScanBlocks) $
-          \ScanBlock{..} -> (currencyCodeToCurrency scanBlockCurrency, scanBlockScanHeight)
-        MFiltersEvent FilterEvent{..} -> let k = currencyCodeToCurrency filterEventCurrency
-          in Just $ M.singleton k filterEventHeight
+        MVersion Version{..} -> Just $ M.fromList $ catMaybes $ ffor (VU.toList versionScanBlocks) $
+          \ScanBlock{..} -> (, scanBlockScanHeight) <$> currencyCodeToCurrency net scanBlockCurrency
+        MFiltersEvent FilterEvent{..} -> do
+          k <- currencyCodeToCurrency net filterEventCurrency
+          pure $ M.singleton k filterEventHeight
         _ -> Nothing
   heightsD <- foldDyn M.union M.empty setHE
 

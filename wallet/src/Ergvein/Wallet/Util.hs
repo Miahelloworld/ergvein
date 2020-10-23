@@ -23,7 +23,7 @@ import Control.Monad.Except
 import Reflex.Dom
 
 import Ergvein.Index.Protocol.Types
-import Ergvein.Wallet.Platform
+import Ergvein.Types.Network
 
 import qualified Ergvein.Types.Currency as ETC
 
@@ -94,18 +94,21 @@ mergeDyn d e = do
   v0 <- sampleDyn d
   holdDyn v0 $ leftmost [e, updated d]
 
-currencyToCurrencyCode :: ETC.Currency -> CurrencyCode
+currencyToCurrencyCode :: ETC.Coin -> CurrencyCode
 currencyToCurrencyCode c = case c of
-  ETC.BTC -> if isTestnet then TBTC else BTC
-  ETC.ERGO -> if isTestnet then TERGO else ERGO
+  ETC.BTC -> BTC
+  ETC.TBTC -> TBTC
+  ETC.RTBTC -> TBTC
+  ETC.ERGO -> ERGO
+  ETC.TERGO -> TERGO
 
-currencyCodeToCurrency :: CurrencyCode -> ETC.Currency
-currencyCodeToCurrency c = case c of
-  BTC -> ETC.BTC
-  TBTC -> ETC.BTC
-  ERGO -> ETC.ERGO
-  TERGO -> ETC.ERGO
-  _ -> error "Currency code not implemented"
+currencyCodeToCurrency :: NetworkType -> CurrencyCode -> Maybe ETC.Coin
+currencyCodeToCurrency net c = case c of
+  BTC -> Just ETC.BTC
+  TBTC -> Just $ if net == Regtest then ETC.RTBTC else ETC.TBTC
+  ERGO -> Just ETC.ERGO
+  TERGO -> Just ETC.TERGO
+  _ -> Nothing
 
 splitEither :: Reflex t => Event t (Either a b) -> (Event t a, Event t b)
 splitEither e = (ae, be)

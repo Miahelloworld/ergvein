@@ -34,6 +34,7 @@ import Reflex.ExternalRef
 
 import Ergvein.Text (showt)
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Types.Transaction
 
 type JSON a = (FromJSON a, ToJSON a)
@@ -50,6 +51,7 @@ class (CurrencyRep cur) => HasNode cur where
 
 data NodeConnection t cur = NodeConnection {
   nodeconCurrency   :: !Currency
+, nodeconNetwork    :: !NetworkType
 , nodeconUrl        :: !SockAddr
 , nodeconStatus     :: !(ExternalRef t (Maybe NodeStatus))
 , nodeconOpensE     :: !(Event t ())
@@ -91,5 +93,5 @@ data NodeMessage = NodeMsgRestart | NodeMsgClose | NodeMsgReq NodeReqG
 
 getNodeReqCurrency :: NodeReqG -> Currency
 getNodeReqCurrency req = case req of
-  NodeReqBTC  {} -> BTC
-  NodeReqERGO {} -> ERGO
+  NodeReqBTC  {} -> Bitcoin
+  NodeReqERGO {} -> Ergo

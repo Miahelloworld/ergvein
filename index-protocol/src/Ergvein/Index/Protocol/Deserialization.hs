@@ -4,7 +4,6 @@ import Codec.Compression.GZip
 import Control.Monad
 import Data.Attoparsec.Binary
 import Data.Attoparsec.ByteString
-import Data.List
 import Data.Word
 
 import Ergvein.Index.Protocol.Types
@@ -36,7 +35,9 @@ word32toMessageType = \case
   _  -> Nothing
 
 currencyCodeParser :: Parser CurrencyCode
-currencyCodeParser = fmap word32ToCurrencyCode anyWord32le
+currencyCodeParser = do
+  w <- anyWord32le
+  maybe (fail $ "Unknown currency code " <> show w) pure $ word32ToCurrencyCode w
 
 word32toRejectType :: Word32 -> Maybe RejectCode
 word32toRejectType = \case

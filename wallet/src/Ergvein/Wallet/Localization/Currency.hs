@@ -5,11 +5,15 @@ module Ergvein.Wallet.Localization.Currency(
 import Ergvein.Types.Currency
 import Ergvein.Wallet.Language
 
+instance LocalizedPrint Coin where
+  localizedShow _ v = case v of
+    BTC   -> "BTC"
+    TBTC  -> "Testnet BTC"
+    RTBTC -> "Regtest BTC"
+    ERGO  -> "ERGO"
+    TERGO -> "Testnet ERGO"
+
 instance LocalizedPrint Currency where
-  localizedShow l v = case l of
-    English -> case v of
-      BTC   -> "BTC"
-      ERGO  -> "ERGO"
-    Russian -> case v of
-      BTC   -> "BTC"
-      ERGO  -> "ERGO"
+  localizedShow _ v = case v of
+    Bitcoin -> "Bitcoin"
+    Ergo    -> "Ergo"

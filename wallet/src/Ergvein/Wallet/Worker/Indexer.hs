@@ -6,13 +6,13 @@ module Ergvein.Wallet.Worker.Indexer
 import Control.Monad
 import Data.Functor.Misc (Const2(..))
 import Data.Time
-import Network.Socket (SockAddr)
 import Reflex.Dom
 import Reflex.ExternalRef
 
 import Ergvein.Text
 import Ergvein.Wallet.Monad.Client
 import Ergvein.Wallet.Monad.Prim
+import Ergvein.Wallet.Monad.Base
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Indexer.Socket
 
@@ -24,7 +24,7 @@ connectionTimeout = 60
 reconnectTimeout :: NominalDiffTime
 reconnectTimeout = 5
 
-indexerNodeController :: (MonadIndexClient t m, MonadHasSettings t m) => [NamedSockAddr] -> m ()
+indexerNodeController :: MonadFrontBase t m => [NamedSockAddr] -> m ()
 indexerNodeController initAddrs = mdo
   nodeLog "Starting"
   sel <- getIndexReqSelector

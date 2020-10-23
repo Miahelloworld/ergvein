@@ -3,11 +3,13 @@ module Ergvein.Wallet.Worker.Fees
     feesWorker
   ) where
 
+import Data.Maybe
 import Data.Time
 import Reflex.ExternalRef
 
 import Ergvein.Index.Protocol.Types
 import Ergvein.Types.Fees
+import Ergvein.Types.Network
 import Ergvein.Wallet.Monad.Async
 import Ergvein.Wallet.Monad.Front
 import Ergvein.Wallet.Util
@@ -26,16 +28,18 @@ feesWorker = do
   buildE  <- getPostBuild
   te      <- fmap void $ tickLossyFromPostBuildTime feesTimeout
   tickE   <- delay 1 $ leftmost [te, void $ updated cursD, buildE]
-  let goE = attachWith (\cs _ -> fmap currencyToCurrencyCode $ S.toList cs) (current cursD) tickE
-  respE <- requestRandomIndexer $ ((ETC.BTC, ) . MFeeRequest) <$> goE -- TODO: Fix this for multiple currencies
+  net     <- getNetworkType
+  let goE = attachWith (\cs _ -> fmap currencyToCurrencyCode $ fmap (flip coinByNetwork net) . S.toList $ cs) (current cursD) tickE
+  respE <- requestRandomIndexer $ ((ETC.Bitcoin, ) . MFeeRequest) <$> goE -- TODO: Fix this for multiple currencies
   let feesE = fforMaybe respE $ \case
-        (_, MFeeResponse fees) -> Just $ repack fees
+        (_, MFeeResponse fees) -> Just $ repack net fees
         _ -> Nothing
   performFork_ $ ffor feesE $ \fm -> modifyExternalRef_ feeRef $ \fm' -> M.union fm fm'
   where
-    repack :: [FeeResp] -> M.Map ETC.Currency FeeBundle
-    repack fees = M.fromList $ ffor fees $ \case
-      FeeRespBTC _ bndl -> (ETC.BTC, bndl)
-      FeeRespGeneric cur h m l -> let
-        bndl = FeeBundle (h,h) (m,m) (l,l)
-        in (currencyCodeToCurrency cur, bndl)
+    repack :: NetworkType -> [FeeResp] -> M.Map ETC.Currency FeeBundle
+    repack net fees = M.fromList $ catMaybes $ ffor fees $ \case
+      FeeRespBTC _ bndl -> Just (ETC.Bitcoin, bndl)
+      FeeRespGeneric cur h m l -> do
+        c <- currencyCodeToCurrency net cur
+        let bndl = FeeBundle (h,h) (m,m) (l,l)
+        pure (ETC.coinCurrency c, bndl)

@@ -16,13 +16,15 @@ data FeeLevel = FeeFast | FeeModerate | FeeCheap
   deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 feeTargetBlocks :: Currency -> FeeLevel -> Int
-feeTargetBlocks cur lev = case (cur, lev) of
-  (BTC, FeeFast)      -> 2
-  (BTC, FeeModerate)  -> 10
-  (BTC, FeeCheap)     -> 25
-  (ERGO, FeeFast)     -> 2
-  (ERGO, FeeModerate) -> 10
-  (ERGO, FeeCheap)    -> 25
+feeTargetBlocks cur lev =  case cur of
+  Bitcoin -> case lev of
+    FeeFast -> 2
+    FeeModerate -> 10
+    FeeCheap -> 25
+  Ergo -> case lev of
+    FeeFast -> 2
+    FeeModerate -> 10
+    FeeCheap -> 25
 
 -- Tuples for smartFee: Conservative and Economical
 data FeeBundle = FeeBundle {

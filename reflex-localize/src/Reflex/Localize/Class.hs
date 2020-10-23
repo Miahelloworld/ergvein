@@ -9,7 +9,6 @@ module Reflex.Localize.Class(
 ) where
 
 import Data.Data
-import Data.Monoid
 import Data.Text (Text)
 import GHC.Generics
 import qualified Data.Text as T
@@ -58,6 +57,10 @@ instance (LocalizedPrint a, LocalizedPrint b) => LocalizedPrint (Either a b) whe
   {-# INLINE localizedShow #-}
   localized = either localized localized
   {-# INLINE localized #-}
+
+instance LocalizedPrint () where
+  localizedShow _ _ = ""
+  {-# INLINE localizedShow #-}
 
 -- | Default implementation
 defaultLocPrintDyn :: MonadLocalized t m => (Language -> a -> Text) -> a -> m (Dynamic t Text)

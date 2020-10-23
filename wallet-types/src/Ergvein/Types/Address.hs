@@ -6,7 +6,7 @@ module Ergvein.Types.Address (
     , egvAddrToString
     , egvAddrFromString
     , egvAddrCurrency
-    , btcAddrToString'
+    , egvAddrCoin
     , btcAddrToString
   ) where
 
@@ -60,12 +60,12 @@ data ErgAddress
   = ErgPubKeyAddress     { getErgAddrAL      :: !VLAddr }
   | ErgScriptHashAddress { getErgAddrHash160 :: !Hash192 }
   | ErgScriptAddress     { getErgAddrAL      :: !VLAddr }
-  deriving (Eq, Generic, Show, Read, Serialize)
+  deriving (Eq, Generic, Show)
 
 data EgvAddress
-  = BtcAddress { getBtcAddr :: !BtcAddress }
-  | ErgAddress { getErgAddr :: !ErgAddress }
-  deriving (Eq, Generic, Show, Read, Serialize)
+  = BtcAddress { getBtcAddr :: !BtcAddress, btcAddrNet :: !NetworkType }
+  | ErgAddress { getErgAddr :: !ErgAddress, ergAddrNet :: !NetworkType }
+  deriving (Eq, Generic, Show)
 
 -- | Binary serializer for 'Base58' ERGO addresses.
 base58PutErg :: ErgNetwork -> Putter ErgAddress
@@ -91,65 +91,67 @@ base58GetErg net = do
       | x == getErgScriptPrefix     net = ErgScriptAddress     <$> S.get
       | otherwise = fail "Does not recognize address prefix"
 
-btcAddrToString' :: BtcNetwork -> BtcAddress -> Text
-btcAddrToString' net addr = case HA.addrToString net addr of
-  Nothing -> undefined -- FIXME
+btcAddrToString :: BtcNetwork -> BtcAddress -> Text
+btcAddrToString net addr = case HA.addrToString net addr of
+  Nothing -> error "btcAddrToString': addrToString returned Nothing that is impossible for not bitcoin cash"
   Just s -> s
 
-btcAddrToString :: BtcAddress -> Text
-btcAddrToString = btcAddrToString' net
-  where net = getBtcNetwork $ getCurrencyNetwork BTC
-
-ergAddrToString :: ErgAddress -> Text
-ergAddrToString = encodeBase58CheckErg . runPut . base58PutErg net
-  where net = getErgNetwork $ getCurrencyNetwork ERGO
+ergAddrToString :: ErgNetwork -> ErgAddress -> Text
+ergAddrToString net = encodeBase58CheckErg . runPut . base58PutErg net
 
 egvAddrCurrency :: EgvAddress -> Currency
 egvAddrCurrency addr = case addr of
-  BtcAddress{} -> BTC
-  ErgAddress{} -> ERGO
+  BtcAddress{..} -> Bitcoin
+  ErgAddress{..} -> Ergo
+
+egvAddrCoin :: EgvAddress -> Coin
+egvAddrCoin addr = case addr of
+  BtcAddress{..} -> coinByNetwork Bitcoin btcAddrNet
+  ErgAddress{..} -> coinByNetwork Ergo ergAddrNet
 
 egvAddrToString :: EgvAddress -> Text
-egvAddrToString (BtcAddress addr) = btcAddrToString addr
-egvAddrToString (ErgAddress addr) = ergAddrToString addr
+egvAddrToString (BtcAddress addr net) = btcAddrToString (bitcoinNetwork net) addr
+egvAddrToString (ErgAddress addr net) = ergAddrToString (ergoNetwork net) addr
 
-btcAddrFromString :: Text -> Maybe BtcAddress
-btcAddrFromString = HA.stringToAddr net
-  where net = getBtcNetwork $ getCurrencyNetwork BTC
+btcAddrFromString :: BtcNetwork -> Text -> Maybe BtcAddress
+btcAddrFromString = HA.stringToAddr
 
-ergAddrFromString :: Text -> Maybe ErgAddress
-ergAddrFromString t = eitherToMaybe . runGet (base58GetErg net) =<< decodeBase58CheckErg t
-  where net = getErgNetwork $ getCurrencyNetwork ERGO
+ergAddrFromString :: ErgNetwork -> Text -> Maybe ErgAddress
+ergAddrFromString net t = eitherToMaybe . runGet (base58GetErg net) =<< decodeBase58CheckErg t
 
-egvAddrFromString :: Currency -> Text -> Maybe EgvAddress
-egvAddrFromString BTC  addr = BtcAddress <$> btcAddrFromString addr
-egvAddrFromString ERGO addr = ErgAddress <$> ergAddrFromString addr
+egvAddrFromString :: NetworkType -> Currency -> Text -> Maybe EgvAddress
+egvAddrFromString net cur addr = case cur of
+  Bitcoin -> BtcAddress <$> btcAddrFromString (bitcoinNetwork net) addr <*> pure net
+  Ergo -> ErgAddress <$> ergAddrFromString (ergoNetwork net) addr <*> pure net
 
 egvAddrToJSON :: EgvAddress -> Value
 egvAddrToJSON = String . egvAddrToString
 
-egvAddrFromJSON :: Currency -> Value -> Parser EgvAddress
-egvAddrFromJSON cur = case cur of
-  BTC -> withText "address" $ \t ->
-    case btcAddrFromString t of
+egvAddrFromJSON :: NetworkType -> Currency -> Value -> Parser EgvAddress
+egvAddrFromJSON net cur = case cur of
+  Bitcoin -> withText "address" $ \t ->
+    case btcAddrFromString (bitcoinNetwork net) t of
       Nothing -> fail "could not decode address"
-      Just x  -> return $ BtcAddress x
-  ERGO -> withText "address" $ \t ->
-    case ergAddrFromString t of
+      Just x  -> return $ BtcAddress x net
+  Ergo -> withText "address" $ \t ->
+    case ergAddrFromString (ergoNetwork net) t of
       Nothing -> fail "could not decode address"
-      Just x  -> return $ ErgAddress x
+      Just x  -> return $ ErgAddress x net
 
 instance ToJSON EgvAddress where
-  toJSON egvAddr@(BtcAddress {}) = object [
-      "currency" .= toJSON BTC
+  toJSON egvAddr@(BtcAddress {..}) = object [
+      "currency" .= toJSON Bitcoin
+    , "network"  .= toJSON btcAddrNet
     , "address"  .= egvAddrToJSON egvAddr
     ]
-  toJSON egvAddr@(ErgAddress {}) = object [
-      "currency" .= toJSON ERGO
+  toJSON egvAddr@(ErgAddress {..}) = object [
+      "currency" .= toJSON Ergo
+    , "network"  .= toJSON ergAddrNet
     , "address"  .= egvAddrToJSON egvAddr
     ]
 
 instance FromJSON EgvAddress where
   parseJSON = withObject "EgvAddress" $ \o -> do
-    cur  <- o .: "currency"
-    egvAddrFromJSON cur =<< (o .: "address")
+    cur <- o .: "currency"
+    net <- o .: "network"
+    egvAddrFromJSON net cur =<< (o .: "address")

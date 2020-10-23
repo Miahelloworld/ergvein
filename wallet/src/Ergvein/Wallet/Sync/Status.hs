@@ -8,8 +8,8 @@ module Ergvein.Wallet.Sync.Status(
 import Data.Time
 import Ergvein.Text
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Wallet.Language
-import Ergvein.Wallet.Platform
 
 data SyncBehind = SyncDays !Int | SyncHours !Int
 
@@ -96,10 +96,10 @@ getAmountTotal v = case v of
   SyncBlocks _ _ a t -> Just (a,t)
   _ -> Nothing
 
-syncProgressBehind :: SyncProgress -> Maybe SyncBehind
-syncProgressBehind (SyncProgress cur v) = case getAmountTotal v of
+syncProgressBehind :: NetworkType -> SyncProgress -> Maybe SyncBehind
+syncProgressBehind net (SyncProgress cur v) = case getAmountTotal v of
   Just (amount, total) -> if amount >= total then Nothing
-    else Just $ nominalToBehind $ currencyBehind cur amount total
+    else Just $ nominalToBehind $ coinBehind (coinByNetwork cur net) amount total
   _ -> Nothing
 
 instance LocalizedPrint SyncProgress where

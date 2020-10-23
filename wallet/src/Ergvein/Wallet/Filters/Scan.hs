@@ -8,15 +8,13 @@ import Control.Monad.IO.Class
 import Data.Dependent.Sum
 import Data.Functor.Identity
 import Data.Vector (Vector)
--- import Network.Haskoin.Block
-
-import Ergvein.Filters.Mutable hiding (BlockHeight, BlockHash)
-import Ergvein.Text
+import Ergvein.Filters.Mutable hiding (BlockHeight)
 import Ergvein.Types.Address
 import Ergvein.Types.Currency
+import Ergvein.Types.Headers
+import Ergvein.Types.Network
 import Ergvein.Types.Transaction
 import Ergvein.Wallet.Filters.Storage
-import Ergvein.Wallet.Platform
 
 import qualified Data.Vector as V
 
@@ -32,11 +30,12 @@ filterAddress addr = foldFilters (egvAddrCurrency addr) f []
 
 -- | Scan through unprocessed filters and return scanned height and matches.
 filterBtcAddress :: (MonadIO m, HasFiltersStorage t m)
-  => BlockHeight                              -- ^ Starting height
+  => NetworkType
+  -> BlockHeight                              -- ^ Starting height
   -> (BlockHeight -> BlockHeight -> IO ())    -- ^ Progress logging callback
   -> BtcAddress                               -- ^ Address to match
   -> m (BlockHeight, Vector (BlockHash, BlockHeight))        -- ^ Scanned height and matches
-filterBtcAddress i0 progCb ba = scanBtcFilters i0 f (filterStartingHeight BTC, mempty)
+filterBtcAddress net i0 progCb ba = scanBtcFilters i0 f (filterStartingHeight $ coinByNetwork Bitcoin net, mempty)
   where
     f i n bhash cfilter (!_, !acc) = do
       liftIO $ progCb i n

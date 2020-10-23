@@ -1,15 +1,22 @@
 module Ergvein.Types.Currency (
     Currency(..)
   , allCurrencies
+  , Coin(..)
+  , allCoins
+  , coinCurrency
+  , coinName
+  , coinGenesisTime
+  , coinBlockTime
+  , coinBehind
+  , isBitcoin
+  , isErgo
+  , isTestingCoin
   , btcResolution
   , ergoResolution
   , currencyResolution
   , currencyResolutionUnit
   , currencyName
-  , currencyGenesisTime
   , currencyBlockDuration
-  , currencyBlockTime
-  , currencyBehind
   , btcSymbolUnit
   , ergoSymbolUnit
   , symbolUnit
@@ -50,9 +57,9 @@ import Web.HttpApiData
 
 import qualified Data.Text as T
 
--- | Supported currencies
-data Currency = BTC | ERGO
-  deriving (Eq, Ord, Show, Read, Enum, Bounded, Generic, Flat, Serialize)
+-- | Currency without tracking of its type
+data Currency = Bitcoin | Ergo
+  deriving (Eq, Ord, Show, Enum, Bounded, Generic, Serialize)
 $(deriveJSON aesonOptions ''Currency)
 
 instance ToJSONKey Currency where
@@ -60,8 +67,8 @@ instance FromJSONKey Currency where
 
 instance FromHttpApiData Currency where
   parseUrlPiece t = case (T.toLower . T.strip) t of
-    "btc" -> Right BTC
-    "ergo" -> Right ERGO
+    "bitcoin" -> Right Bitcoin
+    "ergo" -> Right Ergo
     _ -> Left $ "Unknown Currency: " <> t
 
 instance ToHttpApiData Currency where
@@ -70,6 +77,61 @@ instance ToHttpApiData Currency where
 -- | All supported currencies
 allCurrencies :: [Currency]
 allCurrencies = [minBound .. maxBound]
+
+-- | Supported currencies coins. Coin is currency ticker with respect to kinds
+-- of networks of the currency.
+data Coin =
+    BTC
+  | TBTC -- ^ Testnet Bitcoin
+  | RTBTC -- ^ Regtest Bitcoin
+  | ERGO
+  | TERGO -- ^ Testnet Ergo
+  deriving (Eq, Ord, Show, Read, Enum, Bounded, Generic, Serialize)
+$(deriveJSON aesonOptions ''Coin)
+
+instance ToJSONKey Coin where
+instance FromJSONKey Coin where
+
+instance FromHttpApiData Coin where
+  parseUrlPiece t = case (T.toLower . T.strip) t of
+    "btc" -> Right BTC
+    "tbtc" -> Right TBTC
+    "rtbtc" -> Right RTBTC
+    "ergo" -> Right ERGO
+    "tergo" -> Right TERGO
+    _ -> Left $ "Unknown Coin: " <> t
+
+instance ToHttpApiData Coin where
+  toQueryParam = T.toLower . T.pack . show
+
+-- | All supported currencies
+allCoins :: [Coin]
+allCoins = [minBound .. maxBound]
+
+-- | Drop network infromation from coin, get it kind
+coinCurrency :: Coin -> Currency
+coinCurrency c = case c of
+  BTC -> Bitcoin
+  TBTC -> Bitcoin
+  RTBTC -> Bitcoin
+  ERGO -> Ergo
+  TERGO -> Ergo
+
+-- | Is the currency is kind of Bitcoin
+isBitcoin :: Coin -> Bool
+isBitcoin cur = coinCurrency cur == Bitcoin
+
+-- | Is the currency is kind of Ergo
+isErgo :: Coin -> Bool
+isErgo cur = coinCurrency cur == Ergo
+
+-- | Is given currency is for testing purpose only
+isTestingCoin :: Coin -> Bool
+isTestingCoin cur = case cur of
+  TBTC -> True
+  RTBTC -> True
+  TERGO -> True
+  _ -> False
 
 -- | Supported fiat
 data Fiat = USD | EUR | RUB
@@ -184,72 +246,84 @@ currencyResolution c = currencyResolutionUnit c defUnits
 
 currencyResolutionUnit :: Currency -> Units -> Int
 currencyResolutionUnit c Units{..} = case c of
-  BTC  -> btcResolution $ fromMaybe defUnitBTC unitBTC
-  ERGO -> ergoResolution $ fromMaybe defUnitERGO unitERGO
+  Bitcoin -> btcResolution $ fromMaybe defUnitBTC unitBTC
+  Ergo    -> ergoResolution $ fromMaybe defUnitERGO unitERGO
 {-# INLINE currencyResolutionUnit #-}
 
 symbolUnit :: Currency -> Units -> Text
 symbolUnit cur Units{..} = case cur of
-  BTC  -> btcSymbolUnit $ fromMaybe defUnitBTC unitBTC
-  ERGO -> ergoSymbolUnit $ fromMaybe defUnitERGO unitERGO
+  Bitcoin -> btcSymbolUnit $ fromMaybe defUnitBTC unitBTC
+  Ergo    -> ergoSymbolUnit $ fromMaybe defUnitERGO unitERGO
 
 currencyName :: Currency -> Text
 currencyName c = case c of
-  BTC -> "Bitcoin"
-  ERGO -> "Ergo"
+  Bitcoin -> "Bitcoin"
+  Ergo -> "Ergo"
 {-# INLINE currencyName #-}
 
--- | Get time of genesis block of currency
-currencyGenesisTime :: Currency -> UTCTime
-currencyGenesisTime c = case c of
+coinName :: Coin -> Text
+coinName c = case c of
+  BTC -> "Bitcoin"
+  TBTC -> "Testnet Bitcoin"
+  RTBTC -> "Regtest Bitcoin"
+  ERGO -> "Ergo"
+  TERGO -> "Testnet Ergo"
+{-# INLINE coinName #-}
+
+-- | Get time of genesis block of coin
+coinGenesisTime :: Coin -> UTCTime
+coinGenesisTime c = case c of
   BTC -> fromEpoch (1231006505 :: Int)
+  TBTC -> fromEpoch (1296699402 :: Int)
+  RTBTC -> fromEpoch (1296699402 :: Int)
   ERGO -> fromEpoch (1561998777 :: Int)
+  TERGO -> fromEpoch (1561998777 :: Int)
   where
     fromEpoch = posixSecondsToUTCTime . fromIntegral
 
 -- | Average duration between blocks
 currencyBlockDuration :: Currency -> NominalDiffTime
 currencyBlockDuration c = case c of
-  BTC -> fromIntegral (600 :: Int)
-  ERGO -> fromIntegral (120 :: Int)
+  Bitcoin -> fromIntegral (600 :: Int)
+  Ergo -> fromIntegral (120 :: Int)
 
 -- | Approx time of block
-currencyBlockTime :: Currency -> Int -> UTCTime
-currencyBlockTime c i = addUTCTime (fromIntegral i * currencyBlockDuration c) $ currencyGenesisTime c
+coinBlockTime :: Coin -> Int -> UTCTime
+coinBlockTime c i = addUTCTime (fromIntegral i * currencyBlockDuration (coinCurrency c)) $ coinGenesisTime c
 
 -- | Get approx time we are behind the head
-currencyBehind :: Currency -> Int -> Int -> NominalDiffTime
-currencyBehind c n total = fromIntegral (total - n) * currencyBlockDuration c
+coinBehind :: Coin -> Int -> Int -> NominalDiffTime
+coinBehind c n total = fromIntegral (total - n) * currencyBlockDuration (coinCurrency c)
 
 -- | Smallest amount of currency
 type MoneyUnit = Word64
 
 -- | Amount of money tagged with specific currency
 data Money = Money {
-    moneyCurrency :: !Currency
+    moneyCoin     :: !Coin
   , moneyAmount   :: !MoneyUnit
   } deriving (Eq, Ord, Show, Read, Generic)
 
 -- | Convert to rational number amount of cryptocurrency
 moneyToRational :: Money -> Rational
-moneyToRational (Money cur amount) = fromIntegral amount % (10 ^ currencyResolution cur)
+moneyToRational (Money c amount) = fromIntegral amount % (10 ^ currencyResolution (coinCurrency c))
 {-# INLINE moneyToRational #-}
 
 moneyToRationalUnit :: Money -> Units -> Rational
-moneyToRationalUnit (Money cur amount) units = fromIntegral amount % (10 ^ currencyResolutionUnit cur units)
+moneyToRationalUnit (Money c amount) units = fromIntegral amount % (10 ^ currencyResolutionUnit (coinCurrency c) units)
 {-# INLINE moneyToRationalUnit #-}
 
 -- | Convert a rational number to money value
-moneyFromRational :: Currency -> Rational -> Money
-moneyFromRational cur amount = Money cur val
+moneyFromRational :: Coin -> Rational -> Money
+moneyFromRational c amount = Money c val
   where
-    val = fromIntegral (round $ amount * (10 ^ currencyResolution cur) :: Int)
+    val = fromIntegral (round $ amount * (10 ^ currencyResolution (coinCurrency c)) :: Int)
 {-# INLINE moneyFromRational #-}
 
-moneyFromRationalUnit :: Currency -> Units -> Rational -> Money
-moneyFromRationalUnit cur units amount = Money cur val
+moneyFromRationalUnit :: Coin -> Units -> Rational -> Money
+moneyFromRationalUnit c units amount = Money c val
   where
-    val = fromIntegral (round $ amount * (10 ^ currencyResolutionUnit cur units) :: Int)
+    val = fromIntegral (round $ amount * (10 ^ currencyResolutionUnit (coinCurrency c) units) :: Int)
 {-# INLINE moneyFromRationalUnit #-}
 
 -- | Print amount of cryptocurrency
@@ -261,5 +335,5 @@ showMoneyUnit m units = T.pack $ printf "%f" (realToFrac (moneyToRationalUnit m 
 
 curprefix :: Currency -> Text
 curprefix cur = case cur of
-  BTC ->  "bitcoin://"
-  ERGO -> "ergo://"
+  Bitcoin ->  "bitcoin://"
+  Ergo    ->  "ergo://"

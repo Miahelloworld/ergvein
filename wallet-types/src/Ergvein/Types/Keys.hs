@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 module Ergvein.Types.Keys (
     XPrvKey(..)
   , XPubKey(..)
@@ -17,11 +18,15 @@ module Ergvein.Types.Keys (
   , getLastUnusedKey
   , getPublicKeys
   , egvXPubCurrency
+  , egvXPubCoin
+  , egvXPubNetworkType
+  , egvXPubNetwork
   , getExternalPubKeyIndex
-  , extractXPubKeyFromEgv
-  , getLabelFromEgvPubKey
+  , egvXPubKey
+  , egvXPubLabel
+  , setEgvXPubLabel
   , unEgvXPrvKey
-  , egvXPubKeyToEgvAddress
+  , egvXPubKeyAddress
   , xPubToBtcAddr
   , xPubToErgAddr
   , extractAddrs
@@ -173,7 +178,7 @@ instance FromJSON EgvRootXPrvKey where
 
 -- | Wrapper for a root extended public key (a key without assigned network)
 newtype EgvRootXPubKey = EgvRootXPubKey {unEgvRootXPubKey :: XPubKey}
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show)
 
 instance ToJSON EgvRootXPubKey where
   toJSON (EgvRootXPubKey XPubKey{..}) = object [
@@ -196,13 +201,25 @@ instance FromJSON EgvRootXPubKey where
       _ -> fail "failed to read chain code or key"
 
 -- | Wrapper around XPrvKey for easy to/from json manipulations
-data EgvXPrvKey = BtcXPrvKey { btcXPrvKey :: !XPrvKey} | ErgXPrvKey {ergXPrvKey :: !XPrvKey}
-  deriving (Eq, Show, Read)
+data EgvXPrvKey =
+    BtcXPrvKey { btcXPrvKey :: !XPrvKey, btcXPrvNetwork :: !NetworkType }
+  | ErgXPrvKey { ergXPrvKey :: !XPrvKey, ergXPrvNetwork :: !NetworkType }
+  deriving (Eq, Show)
 
 unEgvXPrvKey :: EgvXPrvKey -> XPrvKey
 unEgvXPrvKey key = case key of
-  BtcXPrvKey k -> k
-  ErgXPrvKey k -> k
+  BtcXPrvKey k _ -> k
+  ErgXPrvKey k _ -> k
+
+egvXPrvNetwork :: EgvXPrvKey -> EgvNetwork
+egvXPrvNetwork key = case key of
+  BtcXPrvKey _ net -> EgvBtcNetwork $ bitcoinNetwork net
+  ErgXPrvKey _ net -> EgvErgNetwork $ ergoNetwork net
+
+egvXPrvNetworkType :: EgvXPrvKey -> NetworkType
+egvXPrvNetworkType key = case key of
+  BtcXPrvKey _ net -> net
+  ErgXPrvKey _ net -> net
 
 -- | Get JSON 'Value' from 'XPrvKey'.
 xPrvToJSON :: EgvNetwork -> XPrvKey -> Value
@@ -218,39 +235,84 @@ xPrvFromJSON net =
 
 instance ToJSON EgvXPrvKey where
   toJSON k = case k of
-    BtcXPrvKey key -> object [
-        "currency" .= toJSON BTC
-      , "prvKey"   .= xPrvToJSON (getCurrencyNetwork BTC) key
+    BtcXPrvKey key _ -> object [
+        "currency" .= toJSON Bitcoin
+      , "network"  .= toJSON (egvXPrvNetworkType k)
+      , "prvKey"   .= xPrvToJSON (egvXPrvNetwork k) key
       ]
-    ErgXPrvKey key -> object [
-        "currency" .= toJSON ERGO
-      , "prvKey"   .= xPrvToJSON (getCurrencyNetwork ERGO) key
+    ErgXPrvKey key _ -> object [
+        "currency" .= toJSON Ergo
+      , "network"  .= toJSON (egvXPrvNetworkType $ k)
+      , "prvKey"   .= xPrvToJSON (egvXPrvNetwork k) key
       ]
 
 instance FromJSON EgvXPrvKey where
   parseJSON = withObject "EgvXPrvKey" $ \o -> do
     currency <- o .: "currency"
-    key <- xPrvFromJSON (getCurrencyNetwork currency) =<< (o .: "prvKey")
+    network <- o .: "network"
+    key <- xPrvFromJSON (currencyNetwork currency network) =<< (o .: "prvKey")
     pure $ case currency of
-      BTC -> BtcXPrvKey key
-      ERGO -> ErgXPrvKey key
+      Bitcoin -> BtcXPrvKey key network
+      Ergo -> ErgXPrvKey key network
 
 -- | Wrapper around XPubKey for easy to/from json manipulations
 data EgvXPubKey =
     ErgXPubKey {
-      ergXPubKey   :: XPubKey
-    , ergXPubLabel :: Text
+      ergXPubKey     :: !XPubKey
+    , ergXPubLabel   :: !Text
+    , ergXPubNetwork :: !NetworkType
     }
   | BtcXPubKey {
-      btcXPubKey   :: XPubKey
-    , btcXPubLabel :: Text
+      btcXPubKey     :: !XPubKey
+    , btcXPubLabel   :: !Text
+    , btcXPubNetwork :: !NetworkType
     }
-  deriving (Eq, Show, Read)
+  deriving (Eq, Show)
 
 egvXPubCurrency :: EgvXPubKey -> Currency
 egvXPubCurrency val = case val of
-  ErgXPubKey{} -> ERGO
-  BtcXPubKey{} -> BTC
+  ErgXPubKey{} -> Ergo
+  BtcXPubKey{} -> Bitcoin
+
+egvXPubCoin :: EgvXPubKey -> Coin
+egvXPubCoin val = coinByNetwork (egvXPubCurrency val) (egvXPubNetworkType val)
+
+egvXPubNetworkType :: EgvXPubKey -> NetworkType
+egvXPubNetworkType val = case val of
+  ErgXPubKey{..} -> ergXPubNetwork
+  BtcXPubKey{..} -> btcXPubNetwork
+
+egvXPubNetwork :: EgvXPubKey -> EgvNetwork
+egvXPubNetwork val = currencyNetwork (egvXPubCurrency val) (egvXPubNetworkType val)
+
+egvXPubKey :: EgvXPubKey -> XPubKey
+egvXPubKey key = case key of
+  ErgXPubKey k _ _ -> k
+  BtcXPubKey k _ _ -> k
+
+egvXPubLabel :: EgvXPubKey -> Text
+egvXPubLabel key = case key of
+  ErgXPubKey _ l _ -> l
+  BtcXPubKey _ l _ -> l
+
+setEgvXPubLabel :: Text -> EgvXPubKey -> EgvXPubKey
+setEgvXPubLabel l key = case key of
+  ErgXPubKey k _ net -> ErgXPubKey k l net
+  BtcXPubKey k _ net -> BtcXPubKey k l net
+
+xPubToBtcAddr :: XPubKey -> BtcAddress
+xPubToBtcAddr key = pubKeyWitnessAddr $ wrapPubKey True (xPubKey key)
+
+xPubToErgAddr :: XPubKey -> ErgAddress
+xPubToErgAddr key = pubKeyErgAddr $ wrapPubKey True (xPubKey key)
+
+pubKeyErgAddr :: PubKeyI -> ErgAddress
+pubKeyErgAddr = ErgPubKeyAddress . VLAddr . BSS.toShort . SE.encode
+
+egvXPubKeyAddress :: EgvXPubKey -> EgvAddress
+egvXPubKeyAddress key = case key of
+  ErgXPubKey k _ net -> ErgAddress (xPubToErgAddr k) net
+  BtcXPubKey k _ net -> BtcAddress (xPubToBtcAddr k) net
 
 -- | Get JSON 'Value' from 'XPubKey'.
 xPubToJSON :: EgvNetwork -> XPubKey -> Value
@@ -267,34 +329,36 @@ xPubFromJSON net =
 instance ToJSON EgvXPubKey where
   toJSON val = object [
       "currency"  .= toJSON cur
-    , "pubKey"    .= xPubToJSON (getCurrencyNetwork cur) key
+    , "network"   .= toJSON (egvXPubNetworkType val)
+    , "pubKey"    .= xPubToJSON (egvXPubNetwork val) key
     , "label"     .= toJSON label
     ]
     where
       (cur, key, label) =  case val of
-        ErgXPubKey k l -> (ERGO, k, l)
-        BtcXPubKey k l -> (BTC, k, l)
+        ErgXPubKey k l _ -> (ERGO, k, l)
+        BtcXPubKey k l _ -> (BTC, k, l)
 
 instance FromJSON EgvXPubKey where
   parseJSON = withObject "EgvXPubKey" $ \o -> do
     currency <- o .: "currency"
-    key <- xPubFromJSON (getCurrencyNetwork currency) =<< (o .: "pubKey")
+    network <- o .: "network"
+    key <- xPubFromJSON (currencyNetwork currency network) =<< (o .: "pubKey")
     label <- o .:? "label" .!= ""
     pure $ case currency of
-      ERGO -> ErgXPubKey key label
-      BTC  -> BtcXPubKey key label
+      Bitcoin -> BtcXPubKey key label network
+      Ergo    -> ErgXPubKey key label network
 
 instance Ord EgvXPubKey where
   compare key1 key2 = case compare c1 c2 of
-    EQ -> compare (xPubExport (getCurrencyNetwork c1) k1) (xPubExport (getCurrencyNetwork c2) k2)
+    EQ -> compare (xPubExport (currencyNetwork c1 (egvXPubNetworkType key1)) k1) (xPubExport (currencyNetwork c2 (egvXPubNetworkType key2)) k2)
     x -> x
     where
       (c1, k1, _) =  case key1 of
-        ErgXPubKey k l -> (ERGO, k, l)
-        BtcXPubKey k l -> (BTC, k, l)
+        ErgXPubKey k l _ -> (Ergo, k, l)
+        BtcXPubKey k l _ -> (Bitcoin, k, l)
       (c2, k2, _) =  case key2 of
-        ErgXPubKey k l -> (ERGO, k, l)
-        BtcXPubKey k l -> (BTC, k, l)
+        ErgXPubKey k l _ -> (Ergo, k, l)
+        BtcXPubKey k l _ -> (Bitcoin, k, l)
 
 data PrvKeystore = PrvKeystore {
   prvKeystore'master   :: !EgvXPrvKey
@@ -307,7 +371,7 @@ data PrvKeystore = PrvKeystore {
   -- ^Map with BIP44 internal extended private keys and corresponding indices.
   -- This private keys must have the following derivation path:
   -- /m\/purpose'\/coin_type'\/account'\/1\/address_index/.
-} deriving (Eq, Show, Read)
+} deriving (Eq, Show)
 
 $(deriveJSON aesonOptionsStripToApostroph ''PrvKeystore)
 
@@ -315,7 +379,7 @@ data EgvPubKeyBox = EgvPubKeyBox {
   pubKeyBox'key    :: !EgvXPubKey
 , pubKeyBox'txs    :: !(S.Set TxId)
 , pubKeyBox'manual :: !Bool
-} deriving (Eq, Show, Read)
+} deriving (Eq, Show)
 
 $(deriveJSON aesonOptionsStripToApostroph ''EgvPubKeyBox)
 
@@ -330,7 +394,7 @@ data PubKeystore = PubKeystore {
   -- ^Map with BIP44 internal extended public keys and corresponding indices.
   -- This addresses must have the following derivation path:
   -- /m\/purpose'\/coin_type'\/account'\/1\/address_index/.
-} deriving (Eq, Show, Read)
+} deriving (Eq, Show)
 
 $(deriveJSON aesonOptionsStripToApostroph ''PubKeystore)
 
@@ -363,34 +427,9 @@ getPublicKeys PubKeystore{..} = ext <> int
 getExternalPubKeyIndex :: PubKeystore -> Int
 getExternalPubKeyIndex = V.length . pubKeystore'external
 
-extractXPubKeyFromEgv :: EgvXPubKey -> XPubKey
-extractXPubKeyFromEgv key = case key of
-  ErgXPubKey k _ -> k
-  BtcXPubKey k _ -> k
-
-getLabelFromEgvPubKey :: EgvXPubKey -> Text
-getLabelFromEgvPubKey key = case key of
-  ErgXPubKey _ l -> l
-  BtcXPubKey _ l -> l
-
-
-xPubToBtcAddr :: XPubKey -> BtcAddress
-xPubToBtcAddr key = pubKeyWitnessAddr $ wrapPubKey True (xPubKey key)
-
-xPubToErgAddr :: XPubKey -> ErgAddress
-xPubToErgAddr key = pubKeyErgAddr $ wrapPubKey True (xPubKey key)
-
-pubKeyErgAddr :: PubKeyI -> ErgAddress
-pubKeyErgAddr = ErgPubKeyAddress . VLAddr . BSS.toShort . SE.encode
-
-egvXPubKeyToEgvAddress :: EgvXPubKey -> EgvAddress
-egvXPubKeyToEgvAddress key = case key of
-  ErgXPubKey k _ -> ErgAddress $ xPubToErgAddr k
-  BtcXPubKey k _ -> BtcAddress $ xPubToBtcAddr k
-
 -- | Extract addresses from keystore
 extractAddrs :: PubKeystore -> Vector EgvAddress
-extractAddrs pks = fmap (egvXPubKeyToEgvAddress . scanBox'key) $ getPublicKeys pks
+extractAddrs pks = fmap (egvXPubKeyAddress . scanBox'key) $ getPublicKeys pks
 
 -- | Supported key purposes. It represents /change/ field in BIP44 derivation path.
 -- External chain is used for addresses that are meant to be visible outside of the wallet (e.g. for receiving payments).

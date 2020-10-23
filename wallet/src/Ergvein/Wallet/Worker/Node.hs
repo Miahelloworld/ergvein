@@ -13,14 +13,12 @@ import Network.DNS
 import Network.Haskoin.Constants
 import Network.Haskoin.Crypto
 import Network.Haskoin.Network
-import Network.Haskoin.Transaction
 import Network.Socket
 import Reflex.ExternalRef
 
 import Ergvein.Text
 import Ergvein.Types.Currency
-import Ergvein.Types.Derive
-import Ergvein.Types.Keys
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Types.Transaction as ETT
 import Ergvein.Wallet.Monad.Async
@@ -30,9 +28,7 @@ import Ergvein.Wallet.Native
 import Ergvein.Wallet.Node
 import Ergvein.Wallet.Node.BTC
 import Ergvein.Wallet.Node.BTC.Mempool
-import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Sync.Status
-import Ergvein.Wallet.Tx
 import Ergvein.Wallet.Util
 
 import qualified Data.Bits as BI
@@ -60,7 +56,6 @@ btcRefrTimeout = 5
 bctNodeController :: MonadFront t m => m ()
 bctNodeController = mdo
   btcLog "Starting"
-  buildE    <- delay 0.1 =<< getPostBuild
   sel       <- getNodeNodeReqSelector
   conMapD   <- getNodeConnectionsD
   nodeRef   <- getNodeConnRef
@@ -68,7 +63,7 @@ bctNodeController = mdo
 
   pubStorageD <- getPubStorageD
 
-  let txidsD = ffor pubStorageD $ \ps -> S.fromList $ M.keys $ ps ^. pubStorage'currencyPubStorages . at BTC . non (error "bctNodeController: not exsisting store!") . currencyPubStorage'transactions
+  let txidsD = ffor pubStorageD $ \ps -> S.fromList $ M.keys $ ps ^. pubStorage'currencyPubStorages . at Bitcoin . non (error "bctNodeController: not exsisting store!") . currencyPubStorage'transactions
 
   let btcLenD = ffor conMapD $ fromMaybe 0 . fmap M.size . DM.lookup BTCTag
   let te' = poke te $ const $ do
@@ -92,8 +87,9 @@ bctNodeController = mdo
   let listActionE = leftmost [addNodeE, remNodeE]
 
   tmpD <- listWithKeyShallowDiff M.empty listActionE $ \u _ _ -> do
-    let reqE = extractReq sel BTC u
-    node <- initBTCNode True u reqE
+    let reqE = extractReq sel Bitcoin u
+    net <- getNetworkType
+    node <- initBTCNode net True u reqE
     modifyExternalRef nodeRef $ \cm -> (addNodeConn (NodeConnBTC node) cm, ())
     closeE' <- delay 0.1 $ nodeconCloseE node
     closeE <- performEvent $ ffor closeE' $ const $
@@ -122,7 +118,7 @@ myTxSender addr msgE = do
   pubD <- getPubStorageD
   let txsD = do
         ps <- pubD
-        let store = ps ^. pubStorage'currencyPubStorages . at BTC . non (error "bctNodeController: not exsisting store!")
+        let store = ps ^. pubStorage'currencyPubStorages . at Bitcoin . non (error "bctNodeController: not exsisting store!")
         let txids = store ^. currencyPubStorage'outgoing
         let txmap = store ^. currencyPubStorage'transactions
         pure (txids, txmap)
@@ -228,27 +224,28 @@ mkUrlBatcher sel remE = mdo
 getRandomBTCNodesFromDNS :: MonadFrontAuth t m => NodeReqSelector t -> Int -> m (Event t [NodeBTC t])
 getRandomBTCNodesFromDNS sel n = do
   buildE <- getPostBuild
-  let dnsUrls = getSeeds btcNetwork
+  net <- getNetworkType
+  let dnsUrls = getSeeds $ bitcoinNetwork net
   i <- liftIO $ randomRIO (0, length dnsUrls - 1)
-  setSyncProgress $ (SyncProgress BTC SyncGettingNodeAddresses) <$ buildE
+  setSyncProgress $ (SyncProgress Bitcoin SyncGettingNodeAddresses) <$ buildE
   rs <- mkResolvSeed
-  urlsE <- performFork $ (requestNodesFromBTCDNS rs (dnsUrls!!i) n) <$ buildE
-  setSyncProgress $ (SyncProgress BTC SyncConnectingToPeers) <$ urlsE
+  urlsE <- performFork $ (requestNodesFromBTCDNS net rs (dnsUrls!!i) n) <$ buildE
+  setSyncProgress $ (SyncProgress Bitcoin SyncConnectingToPeers) <$ urlsE
   nodesD <- widgetHold (pure []) $ ffor urlsE $ \urls -> flip traverse urls $ \u -> let
-    reqE = extractReq sel BTC u
-    in initBTCNode False u reqE
+    reqE = extractReq sel Bitcoin u
+    in initBTCNode net False u reqE
   pure $ fforMaybe (updated nodesD) $ \case
     [] -> Nothing
     ns -> Just ns
 
 -- | Connects to DNS servers and collects n BTC node addresses
-requestNodesFromBTCDNS :: (MonadIO m, PlatformNatives) => ResolvSeed -> String -> Int -> m [SockAddr]
-requestNodesFromBTCDNS rs dnsurl n = liftIO $ do
+requestNodesFromBTCDNS :: (MonadIO m, PlatformNatives) => NetworkType -> ResolvSeed -> String -> Int -> m [SockAddr]
+requestNodesFromBTCDNS net rs dnsurl n = liftIO $ do
   res <- fmap (either (const []) id) $ withResolver rs $ \resolver -> lookupA resolver $ B8.pack dnsurl
   urls <- randomVals n res
   pure $ ffor urls $ \u -> let
     h = toHostAddress u
-    p = fromIntegral $ getDefaultPort btcNetwork
+    p = fromIntegral $ getDefaultPort $ bitcoinNetwork net
     in SockAddrInet p h
 
 -- | Pick n random values from a list

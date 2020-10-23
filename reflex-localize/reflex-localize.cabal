@@ -45,6 +45,7 @@ library
     GeneralizedNewtypeDeriving
     LambdaCase
     MultiParamTypeClasses
+    OverloadedStrings
     RankNTypes
     ScopedTypeVariables
     StandaloneDeriving

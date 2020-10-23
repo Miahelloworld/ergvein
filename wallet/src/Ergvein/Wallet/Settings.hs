@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Ergvein.Wallet.Settings (
     Settings(..)
@@ -7,12 +8,9 @@ module Ergvein.Wallet.Settings (
   , defaultSettings
   , defaultIndexers
   , defIndexerPort
-  , defaultIndexersNum
   , defaultIndexerTimeout
-  , defaultActUrlNum
-  , ExplorerUrls(..)
-  , defaultExplorerUrl
-  , btcDefaultExplorerUrls
+  , ExplorerUrls
+  , defaultExplorerUrls
   , defaultDns
   , SocksConf(..)
   , torSocks
@@ -31,12 +29,12 @@ import Data.Time (NominalDiffTime)
 import Data.Yaml (encodeFile)
 import Network.Socket (HostName, PortNumber)
 import System.Directory
-import Data.Word
 
 import Ergvein.Aeson
 import Ergvein.Lens
 import Ergvein.Text
 import Ergvein.Types.Currency
+import Ergvein.Types.Network
 import Ergvein.Wallet.IP
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Platform
@@ -52,31 +50,20 @@ import Android.HaskellActivity
 import Ergvein.Wallet.Native
 #endif
 
-data ExplorerUrls = ExplorerUrls {
-  testnetUrl :: !Text
-, mainnetUrl :: !Text
-} deriving (Eq, Show)
+-- | Explorer urls are set per currency and network type
+type ExplorerUrls = M.Map Currency (M.Map NetworkType Text)
 
-instance ToJSON ExplorerUrls where
-  toJSON ExplorerUrls{..} = object [
-      "testnetUrl"  .= toJSON testnetUrl
-    , "mainnetUrl"  .= toJSON mainnetUrl
-   ]
-
-instance FromJSON ExplorerUrls where
-  parseJSON = withObject "ExplorerUrls" $ \o -> do
-    testnetUrl          <- o .: "testnetUrl"
-    mainnetUrl          <- o .: "mainnetUrl"
-    pure ExplorerUrls{..}
-
-defaultExplorerUrl :: M.Map Currency ExplorerUrls
-defaultExplorerUrl = M.fromList $ btcDefaultUrls <> ergoDefaultUrls
-  where
-    btcDefaultUrls  = [(BTC, btcDefaultExplorerUrls)]
-    ergoDefaultUrls = [(ERGO, ExplorerUrls "" "")]
-
-btcDefaultExplorerUrls :: ExplorerUrls
-btcDefaultExplorerUrls = ExplorerUrls "https://www.blockchain.com/btc-testnet" "https://www.blockchain.com/btc"
+defaultExplorerUrls ::ExplorerUrls
+defaultExplorerUrls = [
+    (Bitcoin, [
+      (Mainnet, "https://www.blockchain.com/btc")
+    , (Testnet, "https://www.blockchain.com/btc-testnet")
+    ])
+  , (Ergo, [
+      (Mainnet, "https://explorer.ergoplatform.com/en/transactions")
+    , (Testnet, "https://testnet.ergoplatform.com/en/transactions")
+    ])
+  ]
 
 data SocksConf = SocksConf {
   socksConfAddr :: !IP
@@ -112,15 +99,13 @@ data Settings = Settings {
 , settingsActiveAddrs       :: [Text]
 , settingsDeactivatedAddrs  :: [Text]
 , settingsArchivedAddrs     :: [Text]
-, settingsReqUrlNum         :: (Int, Int) -- ^ First is minimum required answers. Second is sufficient amount of answers from indexers.
-, settingsActUrlNum         :: Int
-, settingsExplorerUrl       :: M.Map Currency ExplorerUrls
+, settingsExplorerUrl       :: ExplorerUrls
 , settingsPortfolio         :: Bool
 , settingsFiatCurr          :: Fiat
 , settingsDns               :: S.Set HostName
 , settingsSocksProxy        :: Maybe SocksConf
+, settingsNetwork           :: NetworkType
 } deriving (Eq, Show)
-
 
 makeLensesWith humbleFields ''Settings
 
@@ -137,18 +122,17 @@ instance FromJSON Settings where
     mActiveAddrs              <- o .: "activeAddrs"
     mDeactivatedAddrs         <- o .: "deactivatedAddrs"
     mArchivedAddrs            <- o .: "archivedAddrs"
-    settingsReqUrlNum         <- o .:? "reqUrlNum"  .!= defaultIndexersNum
-    settingsActUrlNum         <- o .:? "actUrlNum"  .!= 10
     let (settingsActiveAddrs, settingsDeactivatedAddrs, settingsArchivedAddrs) =
           case (mActiveAddrs, mDeactivatedAddrs, mArchivedAddrs) of
             (Nothing, Nothing, Nothing) -> (defaultIndexers, [], [])
             (Just [], Just [], Just []) -> (defaultIndexers, [], [])
             _ -> (fromMaybe [] mActiveAddrs, fromMaybe [] mDeactivatedAddrs, fromMaybe [] mArchivedAddrs)
-    settingsExplorerUrl       <- o .:? "explorerUrl" .!= defaultExplorerUrl
+    settingsExplorerUrl       <- o .:? "explorerUrl" .!= defaultExplorerUrls
     settingsPortfolio         <- o .:? "portfolio" .!= False
     settingsFiatCurr          <- o .:? "fiatCurr"  .!= USD
     mdns                      <- o .:? "dns"
     settingsSocksProxy        <- o .:? "socksProxy"
+    settingsNetwork           <- o .:? "network" .!= Mainnet
     let settingsDns = case fromMaybe [] mdns of
           [] -> defaultDns
           dns -> S.fromList dns
@@ -164,13 +148,12 @@ instance ToJSON Settings where
     , "activeAddrs"       .= toJSON settingsActiveAddrs
     , "deactivatedAddrs"  .= toJSON settingsDeactivatedAddrs
     , "archivedAddrs"     .= toJSON settingsArchivedAddrs
-    , "reqUrlNum"         .= toJSON settingsReqUrlNum
-    , "actUrlNum"         .= toJSON settingsActUrlNum
     , "explorerUrl"       .= toJSON settingsExplorerUrl
     , "portfolio"         .= toJSON settingsPortfolio
     , "fiatCurr"          .= toJSON settingsFiatCurr
     , "dns"               .= toJSON settingsDns
     , "socksProxy"        .= toJSON settingsSocksProxy
+    , "network"           .= toJSON settingsNetwork
    ]
 
 defIndexerPort :: PortNumber
@@ -184,14 +167,8 @@ defaultIndexers = [
   , "indexer.ergvein.net"       -- OwO
   ]
 
-defaultIndexersNum :: (Int, Int)
-defaultIndexersNum = (2, 4)
-
 defaultIndexerTimeout :: NominalDiffTime
 defaultIndexerTimeout = 20
-
-defaultActUrlNum :: Int
-defaultActUrlNum = 10
 
 defaultDns :: S.Set HostName
 defaultDns = S.fromList $ if isAndroid
@@ -208,9 +185,7 @@ defaultSettings home =
       , settingsConfigPath        = pack configPath
       , settingsUnits             = Just defUnits
       , settingsReqTimeout        = defaultIndexerTimeout
-      , settingsReqUrlNum         = defaultIndexersNum
-      , settingsActUrlNum         = defaultActUrlNum
-      , settingsExplorerUrl       = defaultExplorerUrl
+      , settingsExplorerUrl       = defaultExplorerUrls
       , settingsPortfolio         = False
       , settingsFiatCurr          = USD
       , settingsActiveAddrs       = defaultIndexers
@@ -218,6 +193,7 @@ defaultSettings home =
       , settingsArchivedAddrs     = []
       , settingsDns               = defaultDns
       , settingsSocksProxy        = Nothing
+      , settingsNetwork           = Mainnet
       }
 
 -- | TODO: Implement some checks to see if the configPath folder is ok to write to

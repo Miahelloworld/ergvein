@@ -19,6 +19,7 @@ import Reflex.Dom.Retractable
 import Reflex.ExternalRef
 
 import Ergvein.Types.AuthInfo
+import Ergvein.Types.Network
 import Ergvein.Types.Storage
 import Ergvein.Wallet.Language
 import Ergvein.Wallet.Monad.Prim
@@ -42,6 +43,8 @@ type MonadFrontConstr t m = (PlatformNatives
   )
 
 class MonadFrontConstr t m => MonadFrontBase t m | m -> t where
+  -- | Get global network type
+  getNetworkType :: m NetworkType
   -- | Get loading widget trigger and fire. This is internal stuff
   getLoadingWidgetTF :: m (Event t (Bool, Text), (Bool, Text) -> IO ())
   -- | Application pause event. Informs that the application goes into the background.
