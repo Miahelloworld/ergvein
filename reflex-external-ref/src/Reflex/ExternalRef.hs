@@ -21,11 +21,14 @@ module Reflex.ExternalRef(
   , modifyExternalRefMaybeM_
   , externalRefBehavior
   , externalRefDynamic
+  , externalRefUniqDynamic
   , externalFromDynamic
   , fmapExternalRef
   ) where
 
 import Control.DeepSeq
+import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Data.IORef
 import GHC.Generics
@@ -171,6 +174,10 @@ externalRefDynamic :: (MonadHold t m, MonadIO m) => ExternalRef t a -> m (Dynami
 externalRefDynamic ExternalRef {..} = do
   a <- liftIO $ readIORef externalRef
   holdDyn a externalEvent
+
+-- | Get dynamic that tracks value of the internal ref
+externalRefUniqDynamic :: (Eq a, Reflex t, MonadFix m, MonadHold t m, MonadIO m) => ExternalRef t a -> m (Dynamic t a)
+externalRefUniqDynamic = holdUniqDyn <=< externalRefDynamic
 
 -- | Create external ref that tracks content of dynamic. Editing of the ref
 -- has no effect on the original dynamic.

@@ -7,6 +7,7 @@ module Ergvein.Wallet.Page.Settings.Unauth
   ) where
 
 import Control.Monad
+import Data.Function
 import Data.Maybe
 import Data.Text
 import Data.Word
@@ -30,8 +31,8 @@ import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Map.Strict as Map
-import qualified Data.Set as S
-import qualified Data.Text as T
+import qualified Data.Set        as S
+import qualified Data.Text       as T
 
 -- TODO: uncomment commented lines when ERGO is ready
 data SubPageSettings
@@ -66,7 +67,7 @@ data DnsAction = DnsDel HostName | DnsUpd HostName HostName | DNSAdd HostName | 
 dnsPageWidget :: MonadFrontBase t m => m ()
 dnsPageWidget = do
   h3 $ localizedText STPSButDns
-  setsD <- getSettingsD
+  setsD <- holdUniqDynBy (on (==) settingsDns) =<< getSettingsD
   actE <- divClass "p-1 fit-content ml-a mr-a" $ do
     editD <- widgetHoldDyn $ ffor setsD $ \s -> do
       when (S.null $ settingsDns s) $ h4 $ localizedText NSSResolveConfDefault

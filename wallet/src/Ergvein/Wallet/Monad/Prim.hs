@@ -49,11 +49,13 @@ import Ergvein.Wallet.Log.Types
 import Ergvein.Wallet.Native
 import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Version
+import Ergvein.Wallet.Orphans
 
 import qualified Control.Monad.Fail as F
 import qualified Network.Socks5 as S5
 import qualified Reflex.Profiled as RP
 import qualified Data.Set as S
+import qualified Network.Socks5 as S5
 
 -- | Type classes that we need from reflex-dom itself.
 type MonadBaseConstr t m = (MonadHold t m
@@ -101,7 +103,7 @@ getSettings = readExternalRef =<< getSettingsRef
 
 -- | Get current settings dynamic
 getSettingsD :: MonadHasSettings t m => m (Dynamic t Settings)
-getSettingsD = externalRefDynamic =<< getSettingsRef
+getSettingsD = externalRefUniqDynamic =<< getSettingsRef
 {-# INLINE getSettingsD #-}
 
 -- | Update app's settings. Sets settings to provided value and stores them
@@ -137,11 +139,11 @@ mkResolvSeed = do
 {-# INLINE mkResolvSeed #-}
 
 getSocksConf :: MonadHasSettings t m => m (Dynamic t (Maybe S5.SocksConf))
-getSocksConf = fmap (fmap toSocksProxy . settingsSocksProxy) <$> getSettingsD
+getSocksConf = holdUniqDyn =<< fmap (fmap toSocksProxy . settingsSocksProxy) <$> getSettingsD
 {-# INLINE getSocksConf #-}
 
 getProxyConf :: MonadHasSettings t m => m (Dynamic t (Maybe SocksConf))
-getProxyConf = fmap settingsSocksProxy <$> getSettingsD
+getProxyConf = holdUniqDyn =<< fmap settingsSocksProxy <$> getSettingsD
 {-# INLINE getProxyConf #-}
 
 -- ===========================================================================
