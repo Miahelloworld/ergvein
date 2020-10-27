@@ -14,6 +14,7 @@ import Text.Read
 import Ergvein.Text
 import Ergvein.Types
 import Ergvein.Wallet.Alert
+import Ergvein.Wallet.Camera
 import Ergvein.Wallet.Clipboard
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Elements.Input
@@ -44,11 +45,7 @@ import qualified Data.Vector as V
 import qualified Network.Haskoin.Script as HS
 import qualified Network.Haskoin.Transaction as HT
 
-#ifdef ANDROID
-import Ergvein.Wallet.Camera
-#endif
-
-sendPage :: MonadFront t m => Currency -> Maybe ((UnitBTC, Word64), (BTCFeeMode, Word64), EgvAddress) -> m ()
+sendPage :: forall t m . MonadFront t m => Currency -> Maybe ((UnitBTC, Word64), (BTCFeeMode, Word64), EgvAddress) -> m ()
 sendPage cur minit = mdo
   walletName <- getWalletName
   title <- localized walletName
@@ -60,7 +57,8 @@ sendPage cur minit = mdo
   pure ()
   where
     stripCurPrefix t = T.dropWhile (== '/') $ fromMaybe t $ T.stripPrefix (curprefix cur) t
-    -- TODO: write type annotation here
+
+    sendWidget :: Dynamic t Text -> m () -> Maybe (Dynamic t (m ())) -> m (Dynamic t (Maybe ((UnitBTC, Word64), (BTCFeeMode, Word64), EgvAddress)))
     sendWidget title navbar thisWidget = wrapperNavbar False title thisWidget navbar $ mdo
       net <- getNetworkType
       let recipientInit = maybe "" (\(_, _, a) -> egvAddrToString a) minit
@@ -68,20 +66,21 @@ sendPage cur minit = mdo
           feeInit = (\(_, f, _) -> f) <$> minit
       retInfoD <- form $ mdo
         recipientErrsD <- holdDyn Nothing $ ffor validationE (either Just (const Nothing))
-#ifdef ANDROID
-        recipientD <- validatedTextFieldSetVal RecipientString recipientInit recipientErrsD (leftmost [resQRcodeE, pasteE])
-        (qrE, pasteE, resQRcodeE) <- divClass "send-page-buttons-wrapper" $ do
-          qrE <- outlineTextIconButtonTypeButton CSScanQR "fas fa-qrcode fa-lg"
-          openE <- delay 1.0 =<< openCamara qrE
-          resQRcodeE <- (fmap . fmap) stripCurPrefix $ waiterResultCamera openE
-          pasteBtnE <- outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
-          pasteE <- clipboardPaste pasteBtnE
-          pure (qrE, pasteE, resQRcodeE)
-#else
-        recipientD <- validatedTextFieldSetVal RecipientString recipientInit recipientErrsD pasteE
-        pasteE <- divClass "send-page-buttons-wrapper" $ do
-          clipboardPaste =<< outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
-#endif
+        recipientD <- if isAndroid then mdo
+            recD <- validatedTextFieldSetVal RecipientString recipientInit recipientErrsD (leftmost [resQRE, pasteE])
+            (pasteE, resQRE) <- divClass "send-page-buttons-wrapper" $ do
+              qrE <- outlineTextIconButtonTypeButton CSScanQR "fas fa-qrcode fa-lg"
+              openE <- delay 1.0 =<< openCamera qrE
+              resQRcodeE <- (fmap . fmap) stripCurPrefix $ waiterResultCamera openE
+              pasteBtnE <- outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
+              pE <- clipboardPaste pasteBtnE
+              pure (pE, resQRcodeE)
+            pure recD
+          else mdo
+            recD <- validatedTextFieldSetVal RecipientString recipientInit recipientErrsD pasteE
+            pasteE <- divClass "send-page-buttons-wrapper" $ do
+              clipboardPaste =<< outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
+            pure recD
         amountD <- sendAmountWidget amountInit $ () <$ validationE
         feeD    <- btcFeeSelectionWidget feeInit submitE
         submitE <- outlineSubmitTextIconButtonClass "w-100" SendBtnString "fas fa-paper-plane fa-lg"

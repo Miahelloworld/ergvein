@@ -17,6 +17,7 @@ import Ergvein.Crypto
 import Ergvein.Text
 import Ergvein.Types.Restore
 import Ergvein.Wallet.Alert
+import Ergvein.Wallet.Camera
 import Ergvein.Wallet.Clipboard
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Elements.Input
@@ -26,6 +27,7 @@ import Ergvein.Wallet.Localization.Util
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Page.Currencies
 import Ergvein.Wallet.Page.Password
+import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Resize
 import Ergvein.Wallet.Storage.Util
 import Ergvein.Wallet.Validate
@@ -145,15 +147,12 @@ restoreFromMnemonicPage = wrapperSimple True $ mdo
   inputE <- divClass "restore-seed-buttons-wrapper" $ do
     pasteBtnE <- pasteBtn
     pasteE <- clipboardPaste pasteBtnE
-#ifdef ANDROID
-    qrCodeBtnE <- scanQRBtn
-    openCameraE <- delay 1.0 =<< openCamara qrCodeBtnE
-    resQRCodeE <- waiterResultCamera openCameraE
-    let inputE' = leftmost [pasteE, resQRCodeE]
-#else
-    let inputE' = pasteE
-#endif
-    pure inputE'
+    if isAndroid then do
+      qrCodeBtnE <- scanQRBtn
+      openCameraE <- delay 1.0 =<< openCamera qrCodeBtnE
+      resQRCodeE <- waiterResultCamera openCameraE
+      pure $ leftmost [pasteE, resQRCodeE]
+    else pure pasteE
   submitE <- outlineButton CSForward
   let validationE = poke submitE $ \_ -> do
         encodedEncryptedMnemonic <- sampleDyn encodedEncryptedMnemonicD
@@ -174,6 +173,9 @@ restoreFromMnemonicPage = wrapperSimple True $ mdo
 
 pasteBtn :: MonadFrontBase t m => m (Event t ())
 pasteBtn = outlineTextIconButtonTypeButton CSPaste "fas fa-clipboard fa-lg"
+
+scanQRBtn :: MonadFrontBase t m => m (Event t ())
+scanQRBtn = outlineTextIconButtonTypeButton CSScanQR "fas fa-qrcode fa-lg"
 
 askSeedPasswordPage :: MonadFrontBase t m => EncryptedByteString -> m ()
 askSeedPasswordPage encryptedMnemonic = do

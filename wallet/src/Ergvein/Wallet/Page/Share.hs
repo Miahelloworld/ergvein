@@ -14,15 +14,13 @@ import Ergvein.Wallet.Language
 import Ergvein.Wallet.Localization.Share
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Page.QRCode
+import Ergvein.Wallet.Platform
+import Ergvein.Wallet.Share
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import Network.Haskoin.Address.Base58
-
-#ifdef ANDROID
-import Ergvein.Wallet.Share
-#endif
 
 sharePage :: MonadFront t m => Currency -> m ()
 sharePage cur = do
@@ -52,17 +50,14 @@ sharePage cur = do
       (e,_) <- elAttr' "div" [("class","share-block-value")] $ mapM_ (\v -> text v >> br) $ T.chunksOf 17 $ shareAddr
       let copyLineE = shareUrl <$ domEvent Click e
       vertSpacer
-#ifdef ANDROID
-      divClass "share-buttons-wrapper" $ do
+      if isAndroid then divClass "share-buttons-wrapper" $ do
         copyButE <- fmap (shareUrl <$) $ outlineTextIconButton ShareCopy "fas fa-copy"
         void $ clipboardCopy $ leftmost [copyLineE, copyButE]
         shareE <- fmap (shareUrl <$) $ outlineTextIconButton ShareShare "fas fa-share-alt"
         void $ shareShareUrl shareE
-#else
-      divClass "" $ do
+      else divClass "" $ do
         copyButE <- fmap (shareUrl <$) $ outlineTextIconButton ShareCopy "fas fa-copy"
         void $ clipboardCopy $ leftmost [copyLineE, copyButE]
-#endif
 
 vertSpacer :: MonadFrontBase t m => m ()
 vertSpacer = divClass "share-v-spacer" blank

@@ -1,6 +1,6 @@
 module Ergvein.Wallet.Camera(
-    openCamara
-  , getResultCamara
+    openCamera
+  , getResultCamera
   , waiterResultCamera
   , debugCameraPage
   ) where
@@ -11,17 +11,17 @@ import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Native
 
-openCamara :: MonadFrontBase t m => Event t () -> m (Event t ())
-openCamara e = runOnUiThread $ ffor e $ \_ -> do
+openCamera :: MonadFrontBase t m => Event t () -> m (Event t ())
+openCamera e = runOnUiThread $ ffor e $ \_ -> do
   cameraWork ""
   pure ()
 
-getResultCamara :: MonadFrontBase t m => Event t () -> m (Event t Text)
-getResultCamara e = runOnUiThread $ ffor e $ const cameraGetResult
+getResultCamera :: MonadFrontBase t m => Event t () -> m (Event t Text)
+getResultCamera e = runOnUiThread $ ffor e $ const cameraGetResult
 
 waiterResultCamera :: MonadFrontBase t m => Event t () -> m (Event t Text)
 waiterResultCamera startE = mdo
-  resE <- getResultCamara $ leftmost [startE, nextE]
+  resE <- getResultCamera $ leftmost [startE, nextE]
   nextE <- delay 1.0 $ fforMaybe resE $ \v -> case T.null v of
                         True  -> Just ()
                         False -> Nothing
@@ -32,7 +32,7 @@ waiterResultCamera startE = mdo
 debugCameraPage :: MonadFrontBase t m => m ()
 debugCameraPage = do
   cameraE <- outlineButton ("Debug QR scan"::Text)
-  openE <- openCamara cameraE
+  openE <- openCamera cameraE
   openGoE <- delay 1.0 openE
   resE <- waiterResultCamera openGoE
   resD <- holdDyn "RESULT" resE

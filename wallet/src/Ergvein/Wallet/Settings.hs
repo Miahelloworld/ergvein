@@ -38,6 +38,7 @@ import Ergvein.Types.Currency
 import Ergvein.Types.Network
 import Ergvein.Wallet.IP
 import Ergvein.Wallet.Language
+import Ergvein.Wallet.Native
 import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Yaml(readYamlEither')
 
@@ -48,7 +49,6 @@ import qualified Data.Set as S
 
 #ifdef ANDROID
 import Android.HaskellActivity
-import Ergvein.Wallet.Native
 #endif
 
 -- | Explorer urls are set per currency and network type
@@ -216,9 +216,20 @@ storeSettings s = liftIO $ do
   createDirectoryIfMissing True $ unpack $ T.dropEnd 1 $ fst $ T.breakOnEnd "/" configPath
   encodeFile (unpack configPath) s
 
-#ifdef ANDROID
 loadSettings :: (MonadIO m, PlatformNatives) => Maybe FilePath -> m Settings
-loadSettings = const $ liftIO $ do
+loadSettings | isAndroid = loadSettingsAndroid
+             | otherwise = loadSettingsDesktop
+
+#ifndef ANDROID
+getFilesDir :: a -> IO (Maybe FilePath)
+getFilesDir = error "getFilesDir: Not implemented for non Android platform"
+
+getHaskellActivity :: IO a
+getHaskellActivity = error "getHaskellActivity: Not implemented for non Android platform"
+#endif
+
+loadSettingsAndroid :: (MonadIO m, PlatformNatives) => Maybe FilePath -> m Settings
+loadSettingsAndroid = const $ liftIO $ do
   mpath <- getFilesDir =<< getHaskellActivity
   case mpath of
     Nothing -> fail "Ergvein panic! No local folder!"
@@ -232,7 +243,6 @@ loadSettings = const $ liftIO $ do
       encodeFile (unpack $ settingsConfigPath cfg) cfg
       pure cfg
 
-#else
 mkDefSettings :: MonadIO m => m Settings
 mkDefSettings = liftIO $ do
   home <- getHomeDirectory
@@ -242,8 +252,8 @@ mkDefSettings = liftIO $ do
   putStrLn $ "Language   : English"
   pure $ defaultSettings (home <> "/.ergvein")
 
-loadSettings :: MonadIO m => Maybe FilePath -> m Settings
-loadSettings mpath = liftIO $ case mpath of
+loadSettingsDesktop :: (MonadIO m, PlatformNatives) => Maybe FilePath -> m Settings
+loadSettingsDesktop mpath = liftIO $ case mpath of
   Nothing -> do
     home <- getHomeDirectory
     let path = home <> "/.ergvein/config.yaml"
@@ -258,4 +268,3 @@ loadSettings mpath = liftIO $ case mpath of
     createDirectoryIfMissing True (unpack $ settingsStoreDir cfg)
     encodeFile (unpack $ settingsConfigPath cfg) cfg
     pure cfg
-#endif

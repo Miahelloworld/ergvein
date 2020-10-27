@@ -16,6 +16,7 @@ import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Localization.Currencies
 import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Page.Password
+import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Wrapper
 
 selectCurrenciesPage :: MonadFrontBase t m => WalletSource -> Mnemonic -> m ()
@@ -25,11 +26,9 @@ selectCurrenciesPage wt mnemonic = wrapperSimple True $ do
   -- uncomment this when ERGO is ready
   -- e <- selectCurrenciesWidget []
   void $ nextWidget $ ffor e $ \ac -> Retractable {
-#ifdef ANDROID
-      retractableNext = setupLoginPage wt Nothing mnemonic ac
-#else
-      retractableNext = passwordPage wt Nothing mnemonic ac Nothing
-#endif
+      retractableNext = if isAndroid
+        then setupLoginPage wt Nothing mnemonic ac
+        else passwordPage wt Nothing mnemonic ac Nothing
     -- , retractablePrev = Just $ pure $ selectCurrenciesPage wt mnemonic -- TODO: uncomment this when ERGO is ready
     , retractablePrev = Nothing -- TODO: remove this when ERGO is ready
     }

@@ -20,11 +20,9 @@ import Ergvein.Wallet.Monad
 import Ergvein.Wallet.Navbar
 import Ergvein.Wallet.Navbar.Types
 import Ergvein.Wallet.Page.QRCode
-import Ergvein.Wallet.Wrapper
-
-#ifdef ANDROID
+import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Share
-#endif
+import Ergvein.Wallet.Wrapper
 
 receivePage :: MonadFront t m => Currency -> m ()
 receivePage cur = do
@@ -43,9 +41,12 @@ exceededGapLimit cur = do
   wrapper True title (Just $ pure $ receivePage cur) $ do
     h2 $ localizedText RPSGap
 
-#ifdef ANDROID
 receivePageWidget :: MonadFront t m => Currency -> Int -> EgvPubKeyBox -> m ()
-receivePageWidget cur i EgvPubKeyBox{..} = do
+receivePageWidget | isAndroid = receivePageWidgetAndroid
+                  | otherwise = receivePageWidgetDesktop
+
+receivePageWidgetAndroid :: MonadFront t m => Currency -> Int -> EgvPubKeyBox -> m ()
+receivePageWidgetAndroid cur i EgvPubKeyBox{..} = do
   walletName <- getWalletName
   title <- localized walletName
   let thisWidget = Just $ pure $ receivePage cur
@@ -57,11 +58,11 @@ receivePageWidget cur i EgvPubKeyBox{..} = do
       cE <- copyAddrBtn
       sE <- fmap (prefixedKeyText <$) shareAddrBtn
       shareQRE <- shareQRBtn
-      shareShareQR $ attachWithMaybe (\m _ -> (, keyTxt) <$> m) (current base64D) shareQRE
+      void $ shareShareQR $ attachWithMaybe (\m _ -> (, keyTxt) <$> m) (current base64D) shareQRE
       pure (nE, cE, sE)
     _ <- shareShareUrl shareE
     setFlagToExtPubKey "receivePageWidget:1" $ (cur, i) <$ newE
-    clipboardCopy (keyTxt <$ copyE)
+    _ <- clipboardCopy (keyTxt <$ copyE)
     divClass "receive-adr-andr" $ text $ "#" <> showt i <> ": " <> keyTxt
     labelD <- divClass "button-receive" $ textFieldNoLabel $ egvXPubLabel pubKeyBox'key
     btnE <- labelAddrBtn
@@ -76,9 +77,8 @@ shareAddrBtn = divClass "receive-btn-wrapper" $ outlineTextIconButton CSShare "f
 shareQRBtn :: MonadFront t m => m (Event t ())
 shareQRBtn = divClass "receive-btn-wrapper" $ outlineTextIconButtonTypeButton CSShareQR "fas fa-qrcode fa-lg"
 
-#else
-receivePageWidget :: MonadFront t m => Currency -> Int -> EgvPubKeyBox -> m ()
-receivePageWidget cur i EgvPubKeyBox{..} = do
+receivePageWidgetDesktop :: MonadFront t m => Currency -> Int -> EgvPubKeyBox -> m ()
+receivePageWidgetDesktop cur i EgvPubKeyBox{..} = do
   walletName <- getWalletName
   title <- localized walletName
   let thisWidget = Just $ pure $ receivePage cur
@@ -98,7 +98,6 @@ receivePageWidget cur i EgvPubKeyBox{..} = do
       pure ()
   where
     keyTxt = egvAddrToString $ egvXPubKeyAddress pubKeyBox'key
-#endif
 
 newAddrBtn :: MonadFront t m => m (Event t ())
 newAddrBtn = divClass "receive-btn-wrapper" $ outlineTextIconButton RPSGenNew "fas fa-forward fa-lg"
