@@ -111,7 +111,7 @@ newServerEnv useTcp noDropFilters optsNoDropIndexers btcClient cfg@Config{..} = 
           unless b' next
       pure btcsock
       else dummyBtcSock bitcoinNodeNetwork
-    btcSeq <- liftIO $ runStdoutLoggingT $ runReaderT (loadRollbackSequence BTC) indexerDBCntx
+    btcSeq <- liftIO $ runStdoutLoggingT $ runReaderT (loadRollbackSequence Bitcoin) indexerDBCntx
     btcSeqVar <- liftIO $ newTVarIO $ unRollbackSequence btcSeq
     pure ServerEnv
       { envServerConfig            = cfg

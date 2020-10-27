@@ -40,8 +40,8 @@ scanningInfo = catMaybes <$> mapM nfo allCurrencies
 
 actualHeight :: Currency -> ServerM BlockHeight
 actualHeight currency = case currency of
-  BTC  -> BTCScanning.actualHeight
-  ERGO -> ERGOScanning.actualHeight
+  Bitcoin  -> BTCScanning.actualHeight
+  Ergo     -> ERGOScanning.actualHeight
 
 scannerThread :: Currency -> (BlockHeight -> ServerM BlockInfo) -> ServerM Thread
 scannerThread currency scanInfo = create $ logOnException threadName . scanIteration
@@ -118,7 +118,7 @@ broadcastFilter BlockMetaInfo{..} = do
 
 blockchainScanning :: ServerM [Thread]
 blockchainScanning = sequenceA
-  [ scannerThread BTC  BTCScanning.blockInfo
+  [ scannerThread Bitcoin BTCScanning.blockInfo
   ]
 
 feesThread :: ServerM () -> ServerM Thread

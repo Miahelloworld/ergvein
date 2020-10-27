@@ -59,7 +59,7 @@ getActualPeers :: (HasIndexerDB m, MonadLogger m, HasDiscoveryRequisites m) =>  
 getActualPeers = do
   db <- getIndexerDb
   -- I put BTC here and downstream, because it doesnt actually matter but we still need a value
-  knownPeers <- getParsedExact @KnownPeersRec Currency.BTC "getKnownPeers" db knownPeersRecKey
+  knownPeers <- getParsedExact @KnownPeersRec Currency.Bitcoin "getKnownPeers" db knownPeersRecKey
   currentTime <- liftIO getCurrentTime
   actualizationDelay <- (/1000000) . fromIntegral . descReqActualizationDelay <$> getDiscoveryRequisites
   let validDate = (-actualizationDelay) `addUTCTime` currentTime
@@ -69,13 +69,13 @@ getActualPeers = do
 getPeerList :: (HasIndexerDB m, MonadLogger m) => m [Peer]
 getPeerList = do
   idb <- getIndexerDb
-  peers <- getParsedExact  @KnownPeersRec Currency.BTC "getKnownPeersList"  idb knownPeersRecKey
+  peers <- getParsedExact  @KnownPeersRec Currency.Bitcoin "getKnownPeersList"  idb knownPeersRecKey
   pure $ convert <$> unKnownPeersRec peers
 
 setPeerList :: (HasIndexerDB m, MonadLogger m) => [Peer] -> m ()
 setPeerList peers = do
   idb <- getIndexerDb
-  upsertItem Currency.BTC  idb knownPeersRecKey $ KnownPeersRec $ convert @_ @KnownPeerRecItem <$> peers
+  upsertItem Currency.Bitcoin  idb knownPeersRecKey $ KnownPeersRec $ convert @_ @KnownPeerRecItem <$> peers
 
 upsertPeer :: (HasIndexerDB m, MonadLogger m) => Peer -> m ()
 upsertPeer peer = do
@@ -86,12 +86,12 @@ upsertPeer peer = do
 peerList :: (HasIndexerDB m, MonadLogger m) => m KnownPeersRec
 peerList = do
   idb <- getIndexerDb
-  getParsedExact @KnownPeersRec Currency.BTC "getKnownPeersList"  idb knownPeersRecKey
+  getParsedExact @KnownPeersRec Currency.Bitcoin "getKnownPeersList"  idb knownPeersRecKey
 
 setPeerRecList :: (HasIndexerDB m, MonadLogger m) => KnownPeersRec -> m ()
 setPeerRecList peers = do
   idb <- getIndexerDb
-  upsertItem Currency.BTC idb knownPeersRecKey peers
+  upsertItem Currency.Bitcoin idb knownPeersRecKey peers
 
 deletePeerBySockAddr :: (HasIndexerDB m, MonadLogger m) => PeerAddr -> m ()
 deletePeerBySockAddr addr = do
@@ -117,7 +117,7 @@ setScannedHeight currency height = do
 
 initIndexerDb :: DB -> IO ()
 initIndexerDb db = do
-  write db def $ putItem Currency.BTC knownPeersRecKey $ KnownPeersRec []
+  write db def $ putItem Currency.Bitcoin knownPeersRecKey $ KnownPeersRec []
 
 addBlockInfo :: (HasBtcRollback m, HasFiltersDB m, HasIndexerDB m, MonadLogger m, MonadBaseControl IO m) => BlockInfo -> m ()
 addBlockInfo update = do
@@ -161,7 +161,7 @@ btcRollbackSize = 64
 insertRollback :: (HasBtcRollback m, HasFiltersDB m, MonadLogger m, MonadBaseControl IO m)
   => Currency -> RollbackRecItem -> m ()
 insertRollback cur = case cur of
-  Currency.BTC -> insertBtcRollback
+  Currency.Bitcoin -> insertBtcRollback
   _ -> const $ pure ()
 
 insertBtcRollback :: (HasBtcRollback m, HasFiltersDB m, MonadLogger m, MonadBaseControl IO m)
@@ -174,7 +174,7 @@ insertBtcRollback ritem = do
     then liftIO $ atomically $ writeTVar rollVar rse'
     else do
       let rest Seq.:> lst = Seq.viewr rse'
-      finalizeRollbackItem Currency.BTC lst
+      finalizeRollbackItem Currency.Bitcoin lst
       liftIO $ atomically $ writeTVar rollVar rest
 
 storeRollbackSequence :: (HasIndexerDB m, MonadLogger m) => Currency -> RollbackSequence -> m ()
@@ -206,12 +206,12 @@ finalizeRollbackItem cur (RollbackRecItem _ outs _ _) = do
 
 performRollback :: (HasFiltersDB m, HasIndexerDB m, HasBtcRollback m, MonadLogger m) => Currency -> m Int
 performRollback cur = case cur of
-  Currency.BTC -> performBtcRollback
+  Currency.Bitcoin -> performBtcRollback
   _ -> pure 0 --TODO
 
 performBtcRollback :: (HasFiltersDB m, HasIndexerDB m, HasBtcRollback m, MonadLogger m) => m Int
 performBtcRollback = do
-  let cur = Currency.BTC
+  let cur = Currency.Bitcoin
   fdb <- getIndexerDb
   idb <- getFiltersDb
   rollVar <- getBtcRollbackVar

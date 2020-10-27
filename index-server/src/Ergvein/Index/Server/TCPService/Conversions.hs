@@ -17,11 +17,11 @@ currencyCodeToCurrency code = do
   pure $ (if isTestnet then testnet else mainnet) code
   where
     testnet = \case
-      TBTC   -> C.BTC
-      TERGO  -> C.ERGO
+      TBTC   -> C.Bitcoin
+      TERGO  -> C.Ergo
     mainnet = \case
-      BTC   -> C.BTC
-      ERGO  -> C.ERGO
+      BTC    -> C.Bitcoin
+      ERGO   -> C.Ergo
 
 currencyToCurrencyCode :: (Monad m, HasServerConfig m) => C.Currency -> m CurrencyCode
 currencyToCurrencyCode code = do
@@ -29,11 +29,11 @@ currencyToCurrencyCode code = do
   pure $ (if isTestnet then testnet else mainnet) code
   where
     testnet = \case
-      C.BTC  -> TBTC 
-      C.ERGO -> TERGO
+      C.Bitcoin  -> TBTC
+      C.Ergo     -> TERGO
     mainnet = \case
-      C.BTC   -> BTC 
-      C.ERGO  -> ERGO
+      C.Bitcoin  -> BTC
+      C.Ergo     -> ERGO
 
 instance Conversion BlockMetaRec BlockFilter where
   convert BlockMetaRec {..} = BlockFilter

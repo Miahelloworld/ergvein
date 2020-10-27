@@ -42,7 +42,7 @@ blockTxInfos block txBlockHeight = do
       prevBlockHeaderHash = mempty --TODO
       blockAddressFilter = mempty --TODO
       spentMap = M.fromList $ (,0) <$> spentTxsIds --TODO
-      blockMeta = BlockMetaInfo ERGO (fromIntegral txBlockHeight) blockHeaderHash prevBlockHeaderHash blockAddressFilter
+      blockMeta = BlockMetaInfo Ergo (fromIntegral txBlockHeight) blockHeaderHash prevBlockHeaderHash blockAddressFilter
   pure $ BlockInfo blockMeta spentMap txInfos
 
 actualHeight :: ApiMonad m => m BlockHeight

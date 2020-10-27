@@ -45,7 +45,7 @@ finalize env scannerThreads workerTreads = do
   liftIO $ sequence_ $ wait <$> scannerThreads
   logInfoN "Dumping rollback data"
   rse <- fmap RollbackSequence $ liftIO $ readTVarIO (envBtcRollback env)
-  runReaderT (storeRollbackSequence BTC rse) (envIndexerDBContext env)
+  runReaderT (storeRollbackSequence Bitcoin rse) (envIndexerDBContext env)
   logInfoN "Waiting for other threads to close"
   liftIO $ sequence_ $ wait <$> workerTreads
   logInfoN "service is stopped"

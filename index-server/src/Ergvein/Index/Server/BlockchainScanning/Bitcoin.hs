@@ -50,7 +50,7 @@ blockTxInfos block txBlockHeight nodeNetwork = do
     withInputTxs uniqueSpentTxs (makeBtcFilter isErgveinIndexable block)
   let blockHeaderHash = HK.getHash256 $ HK.getBlockHash $ HK.headerHash $ HK.blockHeader block
       prevBlockHeaderHash = HK.getHash256 $ HK.getBlockHash $ HK.prevBlock $ HK.blockHeader block
-      blockMeta = BlockMetaInfo BTC txBlockHeight blockHeaderHash prevBlockHeaderHash blockAddressFilter
+      blockMeta = BlockMetaInfo Bitcoin txBlockHeight blockHeaderHash prevBlockHeaderHash blockAddressFilter
 
   pure $ BlockInfo blockMeta (Map.fromList spentTxsIds) txInfos
   where
@@ -64,17 +64,17 @@ blockTxInfos block txBlockHeight nodeNetwork = do
         decodeError = "error decoding btc txIn source transaction " <> show txInId
         fromChache = do
           db <- getFiltersDb
-          src <- getParsedExact BTC "blockTxInfos" db $ txRawKey txInId
-          case egvDeserialize BTC $ unTxRecBytes src of
+          src <- getParsedExact Bitcoin "blockTxInfos" db $ txRawKey txInId
+          case egvDeserialize Bitcoin $ unTxRecBytes src of
             Left err -> error (err <> " : " <> show src)
             Right tx -> pure tx
-          -- pure $ fromRight (error decodeError) $ egvDeserialize BTC $ unTxRecBytes src
+          -- pure $ fromRight (error decodeError) $ egvDeserialize Bitcoin $ unTxRecBytes src
 
     txInfo :: HK.Tx -> (TxInfo, [TxHash])
     txInfo tx = let
       withoutDataCarrier = none HK.isDataCarrier . HK.decodeOutputBS . HK.scriptOutput
       info = TxInfo { txHash = hkTxHashToEgv $ HK.txHash tx
-                    , txBytes = egvSerialize BTC tx
+                    , txBytes = egvSerialize Bitcoin tx
                     , txOutputsCount = fromIntegral $ length $ filter withoutDataCarrier $  HK.txOut tx
                     }
       withoutCoinbaseTx = filter $ (/= HK.nullOutPoint)
@@ -98,9 +98,9 @@ blockInfo blockHeightToScan =  do
       pure $ fromRight blockGettingError $ decode $ HS.toBytes rawBlock
   blockTxInfos parsedBlock blockHeightToScan currentNetwork
   where
-    hashParsingError = error $ "Error parsing BTC BlockHash at height " ++ show blockHeightToScan
-    blockGettingError = error $ "Error getting BTC node at height " ++ show blockHeightToScan
-    blockParsingError = error $ "Error parsing BTC node at height " ++ show blockHeightToScan
+    hashParsingError = error $ "Error parsing Bitcoin BlockHash at height " ++ show blockHeightToScan
+    blockGettingError = error $ "Error getting Bitcoin node at height " ++ show blockHeightToScan
+    blockParsingError = error $ "Error parsing Bitcoin node at height " ++ show blockHeightToScan
 
 feeScaner :: ServerM ()
 feeScaner = feeScaner' 0
@@ -113,14 +113,14 @@ feeScaner = feeScaner' 0
         then pure h'
         else do
           res <- fmap catMaybes $ flip traverse [FeeFast, FeeModerate, FeeCheap] $ \lvl -> do
-            let req mode c = estimateSmartFee c (fromIntegral $ feeTargetBlocks BTC lvl) mode
+            let req mode c = estimateSmartFee c (fromIntegral $ feeTargetBlocks Bitcoin lvl) mode
             mco <- nodeRpcCall $ req Conservative
             mec <- nodeRpcCall $ req Economical
             case (estimateResFee mco, estimateResFee mec) of
               (Just (MkFixed co), Just (MkFixed ec)) -> pure $ Just (lvl, (fromIntegral co `div` 1000 , fromIntegral ec `div` 1000))
               _ -> pure Nothing
           setFees IPT.BTC $ mkFeeBundle res
-          logInfoN $ "[BTC]: " <> showt res
+          logInfoN $ "[Bitcoin]: " <> showt res
           pure $ case res of
             [] -> h
             _  -> h'
