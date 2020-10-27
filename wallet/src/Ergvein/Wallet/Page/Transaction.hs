@@ -169,12 +169,16 @@ transactionsGetting cur = do
           parentTxs <- sequenceA $ fmap (traverse getTxById) parentTxsIds
           let getTxConfirmations mTx = case mTx of
                 Nothing -> 1 -- If tx is not found we put 1 just to indicate that the transaction is confirmed
-                Just tx -> maybe 0 (\x -> hght - (fromMaybe 0 x) + 1) $ (fmap etxMetaHeight $ getBtcTxMeta tx)
+                Just tx -> maybe 0 (countConfirmations hght) (fmap etxMetaHeight $ getBtcTxMeta tx)
               txParentsConfirmations = (fmap . fmap) getTxConfirmations parentTxs
               hasUnconfirmedParents = fmap (L.any (== 0)) txParentsConfirmations
           let rawTxsL = L.filter (\(a,_) -> a/=Nothing) $ L.zip bInOut $ txListRaw bl blh txs txsRefList hasUnconfirmedParents parentTxs
               prepTxs = L.sortOn txDate $ (prepareTransactionView net allbtcAdrS hght timeZone (getSettingsExplorerUrl cur net settings) <$> rawTxsL)
           pure $ L.reverse $ addWalletState prepTxs
+
+    countConfirmations :: BlockHeight -> Maybe BlockHeight -> Word64
+    countConfirmations _ Nothing = 0
+    countConfirmations currentHeight (Just confirmationHeight) = currentHeight - confirmationHeight + 1
 
     filterTx _ pubS = case cur of
       Bitcoin  -> fmap snd $ fromMaybe [] $ fmap Map.toList $ _currencyPubStorage'transactions <$> Map.lookup cur (_pubStorage'currencyPubStorages pubS)

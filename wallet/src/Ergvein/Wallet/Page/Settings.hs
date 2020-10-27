@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE CPP #-}
+
 module Ergvein.Wallet.Page.Settings(
     settingsPage
   ) where
@@ -7,25 +9,33 @@ import Data.Maybe (fromMaybe, catMaybes)
 import Reflex.Dom
 import Reflex.ExternalRef
 
-import Ergvein.Crypto.Keys
+import Ergvein.Crypto
 import Ergvein.Text
+import Ergvein.Types.AuthInfo
 import Ergvein.Types.Currency
 import Ergvein.Types.Storage
+import Ergvein.Wallet.Alert
 import Ergvein.Wallet.Elements
 import Ergvein.Wallet.Language
+import Ergvein.Wallet.Localization.AuthInfo
 import Ergvein.Wallet.Localization.Network
 import Ergvein.Wallet.Localization.Settings
 import Ergvein.Wallet.Localization.Util
 import Ergvein.Wallet.Monad
+import Ergvein.Wallet.Native
 import Ergvein.Wallet.Node
+import Ergvein.Wallet.Page.Password
 import Ergvein.Wallet.Page.Settings.MnemonicExport
 import Ergvein.Wallet.Page.Settings.Network
 import Ergvein.Wallet.Page.Settings.Unauth
+import Ergvein.Wallet.Platform
 import Ergvein.Wallet.Settings
 import Ergvein.Wallet.Storage
+import Ergvein.Wallet.Storage.Util
 import Ergvein.Wallet.Wrapper
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
 import qualified Data.Dependent.Map as DM
 
 -- TODO: uncomment commented lines when ERGO is ready
@@ -38,6 +48,7 @@ data SubPageSettings
   | GoDns
   | GoNodes
   | GoTor
+  | GoPassword
 
 -- TODO: uncomment commented lines when ERGO is ready
 settingsPage :: MonadFront t m => m ()
@@ -53,6 +64,7 @@ settingsPage = do
             , (GoDns, STPSButDns)
             , (GoNodes, STPSButNodes)
             , (GoTor, STPSButTor)
+            , (GoPassword, STPSButSetPass)
             ]
       goE' <- fmap leftmost $ flip traverse btns $ \(v,l) -> fmap (v <$) $ outlineButton l
       mnemonicExportBtnE <- outlineButton STPSButMnemonicExport
@@ -70,8 +82,35 @@ settingsPage = do
             GoDns                     -> dnsPage
             GoNodes                   -> btcNodesPage
             GoTor                     -> torPage
+            GoPassword                -> passwordChangePage
         , retractablePrev = Just $ pure settingsPage
         }
+
+passwordChangePage :: MonadFront t m => m ()
+passwordChangePage = do
+  passE <- changePasswordWidget
+  authInfoD <- getAuthInfo
+  eaibE <- withWallet $ ffor passE $ \(pass, b) prv -> do
+    ai <- sampleDyn authInfoD
+    res <- encryptPrvStorage prv pass
+    case res of
+      Left err -> pure $ Left $ CreateStorageAlert err
+      Right prve -> case passwordToECIESPrvKey pass of
+        Left _ -> pure $ Left GenerateECIESKeyAlert
+        Right k -> pure $ Right $ (,b) $ ai
+          & authInfo'storage . storage'encryptedPrvStorage .~ prve
+          & authInfo'eciesPubKey .~ toPublic k
+          & authInfo'isPlain .~ (pass == "")
+  aibE <- handleDangerMsg eaibE
+  when isAndroid $ performEvent_ $ ffor aibE $ \(ai,b) -> do
+    let fpath = "meta_wallet_" <> T.replace " " "_" (_authInfo'login ai)
+    storeValue fpath b True
+  doneE <- storeWallet "passwordChangePage" =<< setAuthInfo (fmap (Just . fst) aibE)
+  _ <- nextWidget $ ffor doneE $ const $ Retractable{
+      retractableNext = settingsPage
+    , retractablePrev = Nothing
+    }
+  pure ()
 
 btcNodesPage :: MonadFront t m => m ()
 btcNodesPage = do

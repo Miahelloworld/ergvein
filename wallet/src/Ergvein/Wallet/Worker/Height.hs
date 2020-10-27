@@ -132,7 +132,7 @@ btcListenFlow h0 ts0 he0 = Workflow $ mdo
       setE = fmapMaybe (either (const Nothing) Just) actE
       storeE = leftmost [(he0, ts0, h0) <$ buildE, updated htD]
   void $ attachNewBtcHeader "btcListenFlow" True storeE
-  setSyncProgress $ ffor storeE $ \(he,_,_) -> SyncProgress Bitcoin $ SyncGotHeight $ fromIntegral he
+  setSyncProgress $ SyncProgress Bitcoin Synced <$ storeE
   pure ((), startBTCFlow <$ restartE)
 
 pickFirstBlockInv :: [InvVector] -> Maybe BlockHash
