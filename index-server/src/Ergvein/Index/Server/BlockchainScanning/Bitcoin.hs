@@ -42,7 +42,7 @@ import qualified Network.Haskoin.Script             as HK
 import qualified Network.Haskoin.Transaction        as HK
 
 blockTxInfos :: (HasFiltersDB m, MonadLogger m, MonadBaseControl IO m) => HK.Block -> BlockHeight -> HK.Network -> m BlockInfo
-blockTxInfos block txBlockHeight nodeNetwork = do
+blockTxInfos block txBlockHeight _ = do
   let (txInfos , spentTxsIds) = fmap (uniqueWithCount . mconcat) $ unzip $ txInfo <$> HK.blockTxns block
   -- timeLog $ "spentTxsIds: " <> showt (length spentTxsIds)
   uniqueSpentTxs <- fmap mconcat $ mapConcurrently (mapM spentTxSource) $ mkChunks 100 spentTxsIds
@@ -61,7 +61,6 @@ blockTxInfos block txBlockHeight nodeNetwork = do
         Just    sourceTx -> pure sourceTx
         Nothing          -> fromChache
       where
-        decodeError = "error decoding btc txIn source transaction " <> show txInId
         fromChache = do
           db <- getFiltersDb
           src <- getParsedExact Bitcoin "blockTxInfos" db $ txRawKey txInId

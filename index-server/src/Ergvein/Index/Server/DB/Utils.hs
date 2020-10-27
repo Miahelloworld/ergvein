@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Index.Server.DB.Utils
   (
     unflatExact
@@ -26,8 +27,6 @@ import Data.Text.Encoding
 import Data.Time
 import Database.LevelDB
 import Database.LevelDB.Iterator
-import Ergvein.Index.Server.Dependencies
-import System.ByteOrder
 
 import Ergvein.Index.Server.DB.Serialize.Class
 import Ergvein.Types.Currency
@@ -54,7 +53,6 @@ decodeExact s = case S.decode s of
 
 unPrefixedKey :: ByteString -> ByteString
 unPrefixedKey key = BS.tail key
-  where err = error $ "unPrefixedKey error"
 
 parsedKey :: Serialize k => ByteString -> k
 parsedKey = fromRight (error "ser") . S.decode . unPrefixedKey
@@ -67,7 +65,7 @@ safeEntrySlice cur db startKeyBinary startKey endKey = do
   where
     range = LDBStreaming.KeyRange startKeyBinary comparison
     comparison key = case S.decode $ unPrefixedKey key of
-      Right parsedKey -> if startKey <= parsedKey && parsedKey <= endKey then LT else GT
+      Right pkey -> if startKey <= pkey && pkey <= endKey then LT else GT
       _ -> GT
 
 getParsed :: (EgvSerialize v, MonadIO m) => Currency -> Text -> DB -> BS.ByteString -> m (Maybe v)

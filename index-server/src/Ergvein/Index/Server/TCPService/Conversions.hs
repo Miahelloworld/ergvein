@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Index.Server.TCPService.Conversions where
 
 import Conversion
@@ -5,7 +6,6 @@ import Conversion
 import Ergvein.Index.Protocol.Types
 import Ergvein.Index.Server.DB.Schema.Filters
 import Ergvein.Index.Server.BlockchainScanning.Types
-import Ergvein.Text
 import Ergvein.Index.Server.Config
 
 import qualified Ergvein.Types.Currency as C
@@ -19,9 +19,11 @@ currencyCodeToCurrency code = do
     testnet = \case
       TBTC   -> C.Bitcoin
       TERGO  -> C.Ergo
+      _      -> C.Bitcoin -- TODO: Add here when new currencies is added
     mainnet = \case
       BTC    -> C.Bitcoin
       ERGO   -> C.Ergo
+      _      -> C.Bitcoin -- TODO: Add here when new currencies is added
 
 currencyToCurrencyCode :: (Monad m, HasServerConfig m) => C.Currency -> m CurrencyCode
 currencyToCurrencyCode code = do

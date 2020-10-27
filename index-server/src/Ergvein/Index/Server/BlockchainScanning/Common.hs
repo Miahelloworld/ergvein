@@ -5,7 +5,6 @@ import Control.Immortal
 import Control.Monad.Catch
 import Control.Monad.Logger
 import Control.Monad.Reader
-import Conversion
 import Data.Maybe
 import Data.Time
 import System.DiskSpace
@@ -85,8 +84,7 @@ scannerThread currency scanInfo = create $ logOnException threadName . scanItera
                     reportScannedHeight currency current
                     go (succ current)
                   else previousBlockChanged current
-                _ | not enoughSpace ->
-                  logInfoN $ "Not enough available disc space to store block scan result"
+                Right _ -> logInfoN $ "Not enough available disc space to store block scan result"
                 Left errMsg -> blockScanningError errMsg current
 
         isPreviousBlockSame proposedPreviousBlockId = do
@@ -133,7 +131,7 @@ isEnoughSpace = do
   setGauge availableSpaceGauge $ fromIntegral (availSpace - requiredAvailSpace)
   pure $ requiredAvailSpace <= availSpace
  where
-  requiredAvailSpace = 2^30 -- 1Gb
+  requiredAvailSpace = 2^(30 :: Int) -- 1Gb
 
 feesScanning :: ServerM [Thread]
 feesScanning = sequenceA

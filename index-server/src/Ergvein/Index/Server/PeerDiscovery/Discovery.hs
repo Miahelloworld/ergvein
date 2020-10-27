@@ -9,7 +9,6 @@ module Ergvein.Index.Server.PeerDiscovery.Discovery
 import Control.Concurrent.STM
 import Control.Immortal
 import Control.Monad.Random
-import Conversion
 import Data.Foldable
 import Data.Set (Set)
 import Data.Time.Clock
@@ -38,7 +37,7 @@ import qualified Data.Vector.Unboxed  as UV
 considerPeer :: Version -> PeerCandidate -> ServerM ()
 considerPeer ownVer PeerCandidate {..} = do
   ownAddress <- descReqOwnAddress <$> getDiscoveryRequisites
-  isScanActual <- isPeerScanActual (versionScanBlocks ownVer) peerCandidateScanBlocks
+  isScanActual <- isPeerScanActual (versionScanBlocks ownVer)
   when (Just peerCandidateAddress /= ownAddress && isScanActual) $ do
     currentTime <- liftIO getCurrentTime
     upsertPeer $ Peer
@@ -85,8 +84,8 @@ syncWithDefaultPeers = do
       toAdd = (\x -> Peer x currentTime) <$> (Set.toList $ predefinedPeers Set.\\ discoveredPeersSet)
   setPeerList toAdd
 
-isPeerScanActual :: UV.Vector ScanBlock -> UV.Vector ScanBlock -> ServerM Bool
-isPeerScanActual localScanBlocks peerScanBlocks  = do
+isPeerScanActual :: UV.Vector ScanBlock -> ServerM Bool
+isPeerScanActual localScanBlocks = do
   pure $ all matchLocalCurrencyScan peerScanBlockList
   where
     peerScanBlockList :: [ScanBlock]
@@ -110,7 +109,7 @@ isPeerScanActual localScanBlocks peerScanBlocks  = do
 ownVersion :: ServerM Version
 ownVersion = do
   nonce <- liftIO $ randomIO
-  time  <- liftIO $ fromIntegral . floor <$> getPOSIXTime
+  time  <- liftIO $ fromIntegral . (floor :: POSIXTime -> Int) <$> getPOSIXTime
 
   scanNfo <- UV.fromList <$> (mapM verBlock =<< scanningInfo)
 

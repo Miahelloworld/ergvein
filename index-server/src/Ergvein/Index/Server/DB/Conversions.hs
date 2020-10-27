@@ -1,13 +1,11 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Index.Server.DB.Conversions where
 
 import Conversion
 import Data.ByteString.Builder
-import Data.Maybe
 import Data.Text
 import Data.Either
 import Ergvein.Index.Protocol.Types
-import Ergvein.Index.Server.BlockchainScanning.Types
-import Ergvein.Index.Server.DB.Schema.Filters
 import Ergvein.Index.Server.PeerDiscovery.Types as DiscoveryTypes
 import Network.Socket
 import Ergvein.Index.Server.DB.Schema.Indexer
@@ -19,7 +17,7 @@ instance Conversion SockAddr PeerAddr where
   convert = \case
           SockAddrInet  port   ip   -> PeerAddr (V4 ip) (fromInteger $ toInteger port)
           SockAddrInet6 port _ ip _ -> PeerAddr (V6 ip) (fromInteger $ toInteger port)
-          SockAddrUnix _ -> error "SockAddrUnix not supported"
+          n -> error $ "Socket type " <> show n <> " not supported"
 
 
 instance Conversion PeerAddr SockAddr where

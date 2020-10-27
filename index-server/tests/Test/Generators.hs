@@ -1,8 +1,9 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Test.Generators where
 
 import Control.Monad (replicateM)
 import Test.QuickCheck
-import Test.QuickCheck.Instances
+import Test.QuickCheck.Instances()
 import Network.Haskoin.Transaction hiding (TxHash)
 import Data.Serialize (decode)
 import qualified Network.Haskoin.Transaction as HK
@@ -14,14 +15,8 @@ import Ergvein.Index.Server.BlockchainScanning.Types
 import Ergvein.Index.Server.PeerDiscovery.Types
 import Ergvein.Types.Transaction
 
-import qualified Data.List                  as L
-import qualified Data.Vector.Unboxed        as UV
-import qualified Data.Vector                as V
-import qualified Data.ByteString.Lazy       as BL
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Short      as BSS
-import qualified Data.ByteString.Builder    as BB
-import qualified Data.Attoparsec.ByteString as AP
 
 --------------------------------------------------------------------------
 -- generators
@@ -32,12 +27,14 @@ getRandBounded = oneof $ pure <$> [minBound .. maxBound]
 getRandBoundedExcluding :: (Eq a, Enum a, Bounded a) => [a] -> Gen a
 getRandBoundedExcluding exs = oneof $ fmap pure $ filter (\e -> not $ e `elem` exs) $ [minBound .. maxBound]
 
+arbitraryBS32 :: Gen BS.ByteString
 arbitraryBS32 = do
   a <- arbitrary
   pure $ BS.pack $ if BS.length a < 32
     then [0..31]
     else take 32 . BS.unpack $ a
 
+arbitraryBSS32 :: Gen BSS.ShortByteString
 arbitraryBSS32 = do
   a <- arbitrary
   pure $ BSS.pack $ if BSS.length a < 32
@@ -72,7 +69,7 @@ instance Arbitrary RollbackSequence where
 instance Arbitrary HK.TxHash where
   arbitrary = do
     bs <- arbitraryBS32
-    either (const error "Wut") pure $ decode bs
+    either (const $ error "Wut") pure $ decode bs
 
 instance Arbitrary OutPoint where
   arbitrary = OutPoint <$> arbitrary <*> arbitrary

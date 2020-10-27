@@ -1,20 +1,15 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module ProtocolTest.Generators where
 
-import Control.Monad (replicateM)
 import Test.QuickCheck
-import Test.QuickCheck.Instances
+import Test.QuickCheck.Instances()
 
 import Ergvein.Types.Fees
 import Ergvein.Index.Protocol.Types
-import Ergvein.Index.Protocol.Serialization
-import Ergvein.Index.Protocol.Deserialization
 
 import qualified Data.Vector.Unboxed        as UV
 import qualified Data.Vector                as V
-import qualified Data.ByteString.Lazy       as BL
 import qualified Data.ByteString            as BS
-import qualified Data.ByteString.Builder    as BB
-import qualified Data.Attoparsec.ByteString as AP
 
 --------------------------------------------------------------------------
 -- generators
@@ -52,7 +47,7 @@ instance Arbitrary FilterResponse where
   arbitrary = sized $ \n -> FilterResponse <$> getRandBounded <*> (V.replicateM n arbitrary)
 
 instance Arbitrary FilterEvent where
-  arbitrary = sized $ \n -> FilterEvent <$> getRandBounded <*> arbitrary <*> arbitrary <*> arbitrary
+  arbitrary = FilterEvent <$> getRandBounded <*> arbitrary <*> arbitrary <*> arbitrary
 
 instance Arbitrary FeeResp where
   arbitrary = let
@@ -68,10 +63,10 @@ instance Arbitrary Address where
       IPV6 -> Address at <$> arbitrary <*> arbitraryBSLen 16
 
 instance Arbitrary PeerResponse where
-  arbitrary = sized $ \n -> PeerResponse <$> arbitrary
+  arbitrary = PeerResponse <$> arbitrary
 
 instance Arbitrary PeerIntroduce where
-  arbitrary = sized $ \n -> PeerIntroduce <$> arbitrary
+  arbitrary = PeerIntroduce <$> arbitrary
 
 instance Arbitrary CurrencyCode where
   arbitrary = getRandBounded

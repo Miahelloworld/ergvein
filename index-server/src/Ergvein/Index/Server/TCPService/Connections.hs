@@ -1,4 +1,4 @@
-module Ergvein.Index.Server.TCPService.Connections 
+module Ergvein.Index.Server.TCPService.Connections
   ( openConnection
   , closeConnection
   , closeAllConnections
@@ -7,11 +7,9 @@ module Ergvein.Index.Server.TCPService.Connections
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Monad.IO.Unlift
-import Data.Map.Strict (Map(..))
+import Data.Foldable (traverse_)
 import Data.Maybe
-import Ergvein.Index.Protocol.Types (CurrencyCode, Message)
 import Ergvein.Index.Server.Dependencies
 import Network.Socket
 
@@ -39,5 +37,5 @@ closeAllConnections :: HasConnectionsManagement m => m ()
 closeAllConnections = do
   openedConnectionsRef <- openConnections
   liftIO $ do
-    traverse closeSocketAndKillThread =<< Map.elems <$> readTVarIO openedConnectionsRef
+    traverse_ closeSocketAndKillThread =<< Map.elems <$> readTVarIO openedConnectionsRef
     atomically $ writeTVar openedConnectionsRef mempty

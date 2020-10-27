@@ -4,17 +4,12 @@ module Tests.Ergo.Api where
 
 import Test.Tasty.Hspec
 
-import Control.Monad
 import Data.Aeson as A
 import Data.Either.Combinators
-import Data.Text (Text)
 
-import qualified Data.Text as T
 import Text.InterpolatedString.Perl6 (q)
 
 import Ergvein.Interfaces.Ergo.Api
-import Ergvein.Interfaces.Ergo.Scorex.Util.Package
-
 
 spec_BlockHeaderParser :: Spec
 spec_BlockHeaderParser = do

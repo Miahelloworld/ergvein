@@ -1,4 +1,4 @@
-module Ergvein.Index.Server.Dependencies 
+module Ergvein.Index.Server.Dependencies
  ( HasBitcoinNodeNetwork
  , HasDiscoveryRequisites
  , HasShutdownFlag
@@ -16,17 +16,14 @@ module Ergvein.Index.Server.Dependencies
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Concurrent.STM.TVar
 import Control.Monad.IO.Unlift
-import Data.Map.Strict (Map(..))
+import Data.Map.Strict (Map)
 import Ergvein.Index.Protocol.Types (CurrencyCode, Message)
 import Ergvein.Index.Server.PeerDiscovery.Types
 import Ergvein.Types.Fees
-import Network.HTTP.Client
 import Network.Socket
 
 import qualified Data.Map.Strict            as Map
-import qualified Network.HTTP.Client        as HC
 import qualified Network.Haskoin.Constants  as HK
 
 class HasBitcoinNodeNetwork m where

@@ -1,10 +1,10 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Ergvein.Index.Server.DB.Serialize
   (
     EgvSerialize(..)
   , putTxInfosAsRecs
   , serializeWord32
   , deserializeWord32
-  , module Ergvein.Index.Server.DB.Serialize.Tx
   ) where
 
 import Control.DeepSeq
@@ -17,7 +17,7 @@ import Data.ByteString.Builder as BB
 import Data.Foldable
 import Data.Word
 
-import Ergvein.Index.Server.DB.Serialize.Tx
+import Ergvein.Index.Server.DB.Serialize.Tx()
 import Ergvein.Index.Server.BlockchainScanning.Types
 import Ergvein.Index.Server.PeerDiscovery.Types
 import Ergvein.Index.Server.DB.Schema.Filters
@@ -60,7 +60,7 @@ instance EgvSerialize TxRecBytes where
 -- ===========================================================================
 
 instance EgvSerialize BlockMetaRec where
-  egvSerialize cur (BlockMetaRec hd filt) = BL.toStrict . toLazyByteString $ let
+  egvSerialize _ (BlockMetaRec hd filt) = BL.toStrict . toLazyByteString $ let
     len = fromIntegral $ BS.length filt
     in shortByteString hd <> word64LE len <> byteString filt
   egvDeserialize cur = parseOnly $ do

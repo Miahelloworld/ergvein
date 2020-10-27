@@ -9,17 +9,11 @@ import Control.Monad.Catch
 import Control.Monad.IO.Unlift
 import Control.Monad.Logger
 import Control.Monad.Random
-import Control.Monad.Reader
 import Control.Monad.Trans.Except
 import Data.Attoparsec.ByteString
 import Data.ByteString.Builder
 import Data.Either.Combinators
-import Data.Foldable (traverse_)
-import Data.Time.Clock.POSIX
-import Data.Word
 import Network.Socket
-import Network.Socket.ByteString.Lazy
-import System.IO
 
 import Ergvein.Text
 import Ergvein.Index.Protocol.Deserialization
@@ -60,7 +54,7 @@ tcpSrv thread = do
     addr <- resolve port host
     sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
     bind sock (addrAddress addr)
-    listen sock 5
+    listen sock numberOfQueuedConnections
     unliftIO unlift $ mainLoop thread sock
   where
     numberOfQueuedConnections = 5
@@ -103,11 +97,11 @@ runConnection (sock, addr) = incGaugeWhile activeConnsGauge $ do
   case evalResult of
     Right (msgs@(MVersionACK _ : _)) -> do --peer version match ours
       sendChan <- liftIO newTChanIO
-      forM msgs $ (liftIO . writeMsg sendChan)
+      forM_ msgs $ (liftIO . writeMsg sendChan)
       -- Spawn message sender thread
-      fork $ sendLoop sendChan
+      void . fork $ sendLoop sendChan
       -- Spawn broadcaster loop
-      fork $ broadcastLoop sendChan
+      void . fork $ broadcastLoop sendChan
       -- Start message listener
       listenLoop sendChan
     _ -> closeConnection addr
@@ -135,7 +129,7 @@ runConnection (sock, addr) = incGaugeWhile activeConnsGauge $ do
           evalResult <- runExceptT $ evalMsg
           case evalResult of
             Right msgs -> do
-              forM msgs $ (liftIO . writeMsg destinationChan)
+              forM_ msgs $ (liftIO . writeMsg destinationChan)
               listenLoop'
             Left Reject {..} | rejectMsgCode == ZeroBytesReceived -> do
               logInfoN $ "<" <> showt addr <> ">: Client closed the connection"
@@ -166,4 +160,4 @@ runConnection (sock, addr) = incGaugeWhile activeConnsGauge $ do
           except $ mapLeft (\_-> Reject MessageParsing) $ eitherResult $ parse (messageParser msgType) messageBytes
 
         response :: Message -> ExceptT Reject ServerM [Message]
-        response msg = (lift $ handleMsg addr msg) `catch` (\(SomeException ex) -> except $ Left $ Reject InternalServerError)
+        response msg = (lift $ handleMsg addr msg) `catch` (\(SomeException _) -> except $ Left $ Reject InternalServerError)

@@ -4,17 +4,14 @@ module Main where
 --------------------------------------------------------------------------
 -- imports
 
-import Control.Monad (replicateM)
 import Test.QuickCheck
-import Test.QuickCheck.Instances
-import ProtocolTest.Generators
+import Test.QuickCheck.Instances()
+import ProtocolTest.Generators()
 
 import Ergvein.Index.Protocol.Types
 import Ergvein.Index.Protocol.Serialization
 import Ergvein.Index.Protocol.Deserialization
 
-import qualified Data.Vector.Unboxed        as UV
-import qualified Data.Vector                as V
 import qualified Data.ByteString.Lazy       as BL
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Builder    as BB
@@ -47,11 +44,13 @@ deserializeMessageHeader = AP.parseOnly messageHeaderParser
 --------------------------------------------------------------------------
 -- Serialize-deserialize
 
+prop_encdec_MsgHeader_Eq :: MessageHeader -> Bool
 prop_encdec_MsgHeader_Eq mh = either (const False) (mh ==) decMsg
   where
     encMsg = serializeMessageHeader mh
     decMsg = deserializeMessageHeader $ BL.toStrict encMsg
 
+prop_encdec_Msg_Valid :: Message -> Property
 prop_encdec_Msg_Valid msg = whenFail dbgPrint $ either (const False) (const True) decMsg
   where
     encMsg = serializeMessage msg
@@ -61,6 +60,7 @@ prop_encdec_Msg_Valid msg = whenFail dbgPrint $ either (const False) (const True
       print $ "encMsg: " <> (show $ BL.unpack encMsg)
       print $ "decMsg: " <> (show decMsg)
 
+prop_encdec_Msg_Eq :: Message -> Property
 prop_encdec_Msg_Eq msg = whenFail dbgPrint $ either (const False) (msg ==) decMsg
   where
     encMsg = serializeMessage msg
@@ -70,11 +70,13 @@ prop_encdec_Msg_Eq msg = whenFail dbgPrint $ either (const False) (msg ==) decMs
       print $ "encMsg: " <> (show $ BL.unpack encMsg)
       print $ "decMsg: " <> (show decMsg)
 
+prop_encdec_ScanBlock_Valid :: ScanBlock -> Bool
 prop_encdec_ScanBlock_Valid sb = either (const False) (const True) decMsg
   where
     encMsg = serializeScanBlock sb
     decMsg = deserializeScanBlock $ BL.toStrict encMsg
 
+prop_encdec_ScanBlock_Eq :: ScanBlock -> Bool
 prop_encdec_ScanBlock_Eq sb = either (const False) (sb ==) decMsg
   where
     encMsg = serializeScanBlock sb
@@ -82,7 +84,9 @@ prop_encdec_ScanBlock_Eq sb = either (const False) (sb ==) decMsg
 --------------------------------------------------------------------------
 -- main
 
-return []
+pure [] -- To break splices to quickCheckAll can detect above properties
+
+main :: IO Bool
 main = $quickCheckAll
 
 --------------------------------------------------------------------------

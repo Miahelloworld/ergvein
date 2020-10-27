@@ -30,14 +30,14 @@ import qualified Data.Text as T
 import qualified Servant.Client as C
 
 -- | Errors in 'ClientM' monad
-data ClientError = InvalidBaseUrl !Text | ClientError !C.ServantError
+data ClientError = InvalidBaseUrl !Text | ClientError !C.ClientError
   deriving (Eq, Show, Generic)
 
 instance Exception ClientError
 
 -- | Tighten an error info into servant client common client error type
-fromClientError :: ClientError -> C.ServantError
-fromClientError e@(InvalidBaseUrl{}) = C.ConnectionError (T.pack . show $ e)
+fromClientError :: ClientError -> C.ClientError
+fromClientError e@(InvalidBaseUrl{}) = C.ConnectionError (SomeException e)
 fromClientError (ClientError e) = e
 
 -- | Initial environment that is needed to execute 'ClientM' action

@@ -7,8 +7,6 @@ module Style (
 
 import Clay
 import Clay.Selector
-import Clay.Display
-import Clay.Stylesheet (prefixed)
 import Control.Monad
 import Data.Text (Text)
 import Data.Text.Lazy (toStrict)
@@ -129,17 +127,11 @@ textDanger = rgb 220 53 69
 majorBackground :: Color
 majorBackground = rgb 255 255 255
 
-minorBackground :: Color
-minorBackground = rgb 59 78 122
-
 mobileBreakpoint :: Size LengthUnit
 mobileBreakpoint = rem 40
 
 tabletBreakpoint :: Size LengthUnit
 tabletBreakpoint = rem 80
-
-desktopBreakpoint :: Size LengthUnit
-desktopBreakpoint = rem 120
 
 wrapperCss :: Css
 wrapperCss = do
@@ -154,15 +146,6 @@ wrapperCss = do
     flexGrow 1
   ".centered-content" ? do
     margin auto auto auto auto
-
-translatePctX :: Size Percentage -> Css
-translatePctX x = prefixed (browsers <> "transform") $ "translateX(" <> value x <> ")"
-
-translatePctY :: Size Percentage -> Css
-translatePctY y = prefixed (browsers <> "transform") $ "translateY(" <> value y <> ")"
-
-translatePctXY :: Size Percentage -> Size Percentage -> Css
-translatePctXY x y = prefixed (browsers <> "transform") $ "translate(" <> value x <> ", " <> value y <> ")"
 
 headerCss :: Css
 headerCss = do
@@ -253,9 +236,9 @@ fontFamilies Resources{..} = do
   makeFontFace "Roboto-Black" robotoBlackUrl
   makeFontFace "Roboto-Medium" robotoMediumUrl
   where
-    makeFontFace name url = fontFace $ do
-      fontFamily [name] []
-      fontFaceSrc [FontFaceSrcUrl url (Just TrueType)]
+    makeFontFace fname furl = fontFace $ do
+      fontFamily [fname] []
+      fontFaceSrc [FontFaceSrcUrl furl (Just TrueType)]
       fontWeight $ weight 400
 
 faFontFamilies :: Resources -> Css
@@ -282,11 +265,11 @@ faFontFamilies Resources{..} = do
     , fasolid900woff2Url
     ]
   where
-    makeFontFace name w urls = fontFace $ do
-      fontFamily [name] []
+    makeFontFace fname w urls = fontFace $ do
+      fontFamily [fname] []
       fontStyle normal
-      fontFaceSrc [FontFaceSrcUrl url (Just format)
-        | url    <- urls,
+      fontFaceSrc [FontFaceSrcUrl iu (Just format)
+        | iu     <- urls,
           format <- [EmbeddedOpenType, SVG, TrueType, WOFF, WOFF2]]
       fontWeight $ weight w
 
@@ -695,15 +678,6 @@ alertsCss = do
   ".alert-secondary" ? do
     color "#000"
     backgroundColor "#a9a7a7"
-
-patternKeyCss :: Css
-patternKeyCss = do
-  ".myTestDiv" ? do
-    pointerEvents none
-    backgroundColor "red"
-    display block
-  ".myDebugLog" ? do
-    display block
 
 selectCss :: Css
 selectCss = do
