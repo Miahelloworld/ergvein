@@ -69,6 +69,15 @@ getXPrvKey (EgvErgNetwork net) = do
           <*> getWord32be
           <*> get
           <*> getPadPrvKey
+getXPrvKey (EgvCypNetwork net) = do
+  ver <- getWord32be
+  unless (ver == getCypExtSecretPrefix net) $ fail
+      "Get: Invalid version for extended private key"
+  XPrvKey <$> getWord8
+          <*> getWord32be
+          <*> getWord32be
+          <*> get
+          <*> getPadPrvKey
 
 -- | Serialize an extended private key.
 putXPrvKey :: EgvNetwork -> Putter XPrvKey
@@ -81,6 +90,13 @@ putXPrvKey (EgvBtcNetwork net) k = do
   putPadPrvKey $ xPrvKey k
 putXPrvKey (EgvErgNetwork net) k = do
   putWord32be  $ getErgExtSecretPrefix net
+  putWord8     $ xPrvDepth k
+  putWord32be  $ xPrvParent k
+  putWord32be  $ xPrvIndex k
+  put          $ xPrvChain k
+  putPadPrvKey $ xPrvKey k
+putXPrvKey (EgvCypNetwork net) k = do
+  putWord32be  $ getCypExtSecretPrefix net
   putWord8     $ xPrvDepth k
   putWord32be  $ xPrvParent k
   putWord32be  $ xPrvIndex k
@@ -107,6 +123,16 @@ getXPubKey (EgvErgNetwork net) = do
           <*> getWord32be
           <*> get
           <*> (pubKeyPoint <$> get)
+getXPubKey (EgvCypNetwork net) = do
+  ver <- getWord32be
+  unless (ver == getCypExtPubKeyPrefix net) $ fail
+      "Get: Invalid version for extended public key"
+  XPubKey <$> getWord8
+          <*> getWord32be
+          <*> getWord32be
+          <*> get
+          <*> (pubKeyPoint <$> get)
+
 
 -- | Serialize an extended public key.
 putXPubKey :: EgvNetwork -> Putter XPubKey
@@ -124,28 +150,40 @@ putXPubKey (EgvErgNetwork net) k = do
   putWord32be $ xPubIndex k
   put         $ xPubChain k
   put         $ wrapPubKey True (xPubKey k)
+putXPubKey (EgvCypNetwork net) k = do
+  putWord32be $ getCypExtPubKeyPrefix net
+  putWord8    $ xPubDepth k
+  putWord32be $ xPubParent k
+  putWord32be $ xPubIndex k
+  put         $ xPubChain k
+  put         $ wrapPubKey True (xPubKey k)
+
 
 -- | Exports an extended private key to the BIP32 key export format ('Base58').
 xPrvExport :: EgvNetwork -> XPrvKey -> Base58
 xPrvExport n@(EgvBtcNetwork _) = encodeBase58CheckBtc . runPut . putXPrvKey n
 xPrvExport n@(EgvErgNetwork _) = encodeBase58CheckErg . runPut . putXPrvKey n
+xPrvExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPrvKey n
 
 -- | Exports an extended public key to the BIP32 key export format ('Base58').
 xPubExport :: EgvNetwork -> XPubKey -> Base58
 xPubExport n@(EgvBtcNetwork _) = encodeBase58CheckBtc . runPut . putXPubKey n
 xPubExport n@(EgvErgNetwork _) = encodeBase58CheckErg . runPut . putXPubKey n
+xPubExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPubKey n
 
 -- | Decodes a BIP32 encoded extended private key. This function will fail if
 -- invalid base 58 characters are detected or if the checksum fails.
 xPrvImport :: EgvNetwork -> Base58 -> Maybe XPrvKey
 xPrvImport n@(EgvBtcNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckBtc
 xPrvImport n@(EgvErgNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckErg
+xPrvImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckCyp
 
 -- | Decodes a BIP32 encoded extended public key. This function will fail if
 -- invalid base 58 characters are detected or if the checksum fails.
 xPubImport :: EgvNetwork -> Base58 -> Maybe XPubKey
 xPubImport n@(EgvBtcNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckBtc
 xPubImport n@(EgvErgNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckErg
+xPubImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckCyp
 
 -- | Wrapper for a root extended private key (a key without assigned network)
 newtype EgvRootXPrvKey = EgvRootXPrvKey {unEgvRootXPrvKey :: XPrvKey}
@@ -196,13 +234,17 @@ instance FromJSON EgvRootXPubKey where
       _ -> fail "failed to read chain code or key"
 
 -- | Wrapper around XPrvKey for easy to/from json manipulations
-data EgvXPrvKey = BtcXPrvKey { btcXPrvKey :: !XPrvKey} | ErgXPrvKey {ergXPrvKey :: !XPrvKey}
+data EgvXPrvKey
+  = BtcXPrvKey { btcXPrvKey :: !XPrvKey }
+  | ErgXPrvKey { ergXPrvKey :: !XPrvKey }
+  | CypXPrvKey { cypXPrvKey :: !XPrvKey }
   deriving (Eq, Show, Read)
 
 unEgvXPrvKey :: EgvXPrvKey -> XPrvKey
 unEgvXPrvKey key = case key of
   BtcXPrvKey k -> k
   ErgXPrvKey k -> k
+  CypXPrvKey k -> k
 
 -- | Get JSON 'Value' from 'XPrvKey'.
 xPrvToJSON :: EgvNetwork -> XPrvKey -> Value
@@ -226,14 +268,19 @@ instance ToJSON EgvXPrvKey where
         "currency" .= toJSON ERGO
       , "prvKey"   .= xPrvToJSON (getCurrencyNetwork ERGO) key
       ]
+    CypXPrvKey key -> object [
+        "currency" .= toJSON CYPRA
+      , "prvKey"   .= xPrvToJSON (getCurrencyNetwork CYPRA) key
+      ]
 
 instance FromJSON EgvXPrvKey where
   parseJSON = withObject "EgvXPrvKey" $ \o -> do
     currency <- o .: "currency"
     key <- xPrvFromJSON (getCurrencyNetwork currency) =<< (o .: "prvKey")
     pure $ case currency of
-      BTC -> BtcXPrvKey key
-      ERGO -> ErgXPrvKey key
+      BTC   -> BtcXPrvKey key
+      ERGO  -> ErgXPrvKey key
+      CYPRA -> CypXPrvKey key
 
 -- | Wrapper around XPubKey for easy to/from json manipulations
 data EgvXPubKey =
@@ -245,12 +292,17 @@ data EgvXPubKey =
       btcXPubKey   :: XPubKey
     , btcXPubLabel :: Text
     }
+  | CypXPubKey {
+      cypXPubKey   :: XPubKey
+    , cypXPubLabel :: Text
+    }
   deriving (Eq, Show, Read)
 
 egvXPubCurrency :: EgvXPubKey -> Currency
 egvXPubCurrency val = case val of
   ErgXPubKey{} -> ERGO
   BtcXPubKey{} -> BTC
+  CypXPubKey{} -> CYPRA
 
 -- | Get JSON 'Value' from 'XPubKey'.
 xPubToJSON :: EgvNetwork -> XPubKey -> Value
@@ -272,8 +324,9 @@ instance ToJSON EgvXPubKey where
     ]
     where
       (cur, key, label) =  case val of
-        ErgXPubKey k l -> (ERGO, k, l)
-        BtcXPubKey k l -> (BTC, k, l)
+        ErgXPubKey k l -> (ERGO,  k, l)
+        BtcXPubKey k l -> (BTC,   k, l)
+        CypXPubKey k l -> (CYPRA, k, l)
 
 instance FromJSON EgvXPubKey where
   parseJSON = withObject "EgvXPubKey" $ \o -> do
@@ -281,8 +334,9 @@ instance FromJSON EgvXPubKey where
     key <- xPubFromJSON (getCurrencyNetwork currency) =<< (o .: "pubKey")
     label <- o .:? "label" .!= ""
     pure $ case currency of
-      ERGO -> ErgXPubKey key label
-      BTC  -> BtcXPubKey key label
+      ERGO  -> ErgXPubKey key label
+      BTC   -> BtcXPubKey key label
+      CYPRA -> CypXPubKey key label
 
 instance Ord EgvXPubKey where
   compare key1 key2 = case compare c1 c2 of
@@ -292,9 +346,11 @@ instance Ord EgvXPubKey where
       (c1, k1, _l1) =  case key1 of
         ErgXPubKey k l -> (ERGO, k, l)
         BtcXPubKey k l -> (BTC, k, l)
+        CypXPubKey k l -> (CYPRA, k, l)
       (c2, k2, _l2) =  case key2 of
         ErgXPubKey k l -> (ERGO, k, l)
         BtcXPubKey k l -> (BTC, k, l)
+        CypXPubKey k l -> (CYPRA, k, l)
 
 data PrvKeystore = PrvKeystore {
   prvKeystore'master   :: !EgvXPrvKey
@@ -367,12 +423,13 @@ extractXPubKeyFromEgv :: EgvXPubKey -> XPubKey
 extractXPubKeyFromEgv key = case key of
   ErgXPubKey k _ -> k
   BtcXPubKey k _ -> k
+  CypXPubKey k _ -> k
 
 getLabelFromEgvPubKey :: EgvXPubKey -> Text
 getLabelFromEgvPubKey key = case key of
   ErgXPubKey _ l -> l
   BtcXPubKey _ l -> l
-
+  CypXPubKey _ l -> l
 
 xPubToBtcAddr :: XPubKey -> BtcAddress
 xPubToBtcAddr key = pubKeyWitnessAddr $ wrapPubKey True (xPubKey key)
@@ -387,6 +444,7 @@ egvXPubKeyToEgvAddress :: EgvXPubKey -> EgvAddress
 egvXPubKeyToEgvAddress key = case key of
   ErgXPubKey k _ -> ErgAddress $ xPubToErgAddr k
   BtcXPubKey k _ -> BtcAddress $ xPubToBtcAddr k
+  CypXPubKey _k _ -> undefined -- FIXME: Cypra
 
 -- | Extract addresses from keystore
 extractAddrs :: PubKeystore -> Vector EgvAddress

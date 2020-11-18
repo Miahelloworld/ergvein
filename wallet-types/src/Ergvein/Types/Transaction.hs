@@ -85,8 +85,9 @@ type TxOutIndex = Word
 
 -- | index of the first block in blockchain
 currencyHeightStart :: Currency -> BlockHeight
-currencyHeightStart = \case BTC  -> 0
-                            ERGO -> 1
+currencyHeightStart = \case BTC   -> 0
+                            ERGO  -> 1
+                            CYPRA -> 0
 {-# INLINE currencyHeightStart #-}
 
 type BtcTx = HK.Tx
@@ -126,16 +127,20 @@ $(deriveJSON (aesonOptionsStripPrefix "etxMeta") ''EgvTxMeta)
 data EgvTx
   = BtcTx { getBtcTx :: !BtcTx, getBtcTxMeta :: !(Maybe EgvTxMeta)}
   | ErgTx { getErgTx :: !ErgTx, getErgTxMeta :: !(Maybe EgvTxMeta)}
+  -- FIXME: Cypra
+  | CypTx { getCypTx :: !(),    getCypTxMeta :: !(Maybe EgvTxMeta)}
   deriving (Eq, Show, Read)
 
 egvTxToString :: EgvTx -> Text
 egvTxToString (BtcTx tx _) = btcTxToString tx
 egvTxToString (ErgTx tx _) = ergTxToString tx
+egvTxToString (CypTx _tx _) = undefined -- FIXME: Cypra
 
 egvTxCurrency :: EgvTx -> Currency
 egvTxCurrency e = case e of
   BtcTx{} -> BTC
   ErgTx{} -> ERGO
+  CypTx{} -> CYPRA
 
 egvTxFromJSON :: Currency -> Value -> Parser EgvTx
 egvTxFromJSON = \case
@@ -147,16 +152,19 @@ egvTxFromJSON = \case
     case ergTxFromString t of
       Nothing -> fail "could not decode Ergo transaction"
       Just x  -> return $ ErgTx x Nothing
+  CYPRA -> undefined -- FIXME: Cypra
 
 getEgvTxMeta :: EgvTx -> Maybe EgvTxMeta
 getEgvTxMeta etx= case etx of
   BtcTx _ m -> m
   ErgTx _ m -> m
+  CypTx _ m -> m
 
 setEgvTxMeta :: EgvTx -> Maybe EgvTxMeta -> EgvTx
 setEgvTxMeta etx mh = case etx of
   BtcTx tx _ -> BtcTx tx mh
   ErgTx tx _ -> ErgTx tx mh
+  CypTx tx _ -> CypTx tx mh
 
 instance ToJSON EgvTx where
   toJSON (BtcTx tx meta) = object [
@@ -167,6 +175,11 @@ instance ToJSON EgvTx where
   toJSON (ErgTx tx meta) = object [
       "currency"  .= toJSON ERGO
     , "tx"        .= ergTxToString tx
+    , "meta"      .= toJSON meta
+    ]
+  toJSON (CypTx _tx meta) = object [
+      "currency"  .= toJSON CYPRA
+    -- , "tx"        .= _ tx -- FIXME: Cypra
     , "meta"      .= toJSON meta
     ]
 
@@ -205,6 +218,7 @@ ergTxHashFromStr t = BSS.toShort <$> decodeHex t
 egvTxHashFromStr :: Currency -> Text -> Maybe TxHash
 egvTxHashFromStr BTC  addr = BtcTxHash <$> btcTxHashFromStr addr
 egvTxHashFromStr ERGO addr = ErgTxHash <$> ergTxHashFromStr addr
+egvTxHashFromStr CYPRA _addr = undefined -- FIXME: Cypra
 
 egvTxHashToJSON :: TxHash -> Value
 egvTxHashToJSON = A.String . egvTxHashToStr
@@ -219,6 +233,7 @@ egvTxHashFromJSON = \case
     case ergTxHashFromStr t of
       Nothing -> fail "could not decode transaction hash"
       Just x  -> return $ ErgTxHash x
+  CYPRA -> withText "txHash" undefined -- FIXME: Cypra
 
 instance ToJSON TxHash where
   toJSON egvTxHash@(BtcTxHash _) = object [
@@ -245,3 +260,4 @@ hkTxHashToEgv = BtcTxHash
 egvTxId :: EgvTx -> TxId
 egvTxId (BtcTx tx _) = hkTxHashToEgv $ HK.txHash tx
 egvTxId (ErgTx _ _)  = error "egvTxId: implement for Ergo!"
+egvTxId (CypTx _ _)  = undefined -- FIXME: Cypra

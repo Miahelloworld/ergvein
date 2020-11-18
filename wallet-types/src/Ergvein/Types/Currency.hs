@@ -27,6 +27,9 @@ module Ergvein.Types.Currency (
   , UnitERGO(..)
   , defUnitERGO
   , allUnitsERGO
+  , UnitCYPRA(..)
+  , defUnitCYPRA
+  , allUnitsCypra
   , Units(..)
   , defUnits
   , getUnitBTC
@@ -50,7 +53,7 @@ import Text.Printf
 import qualified Data.Text as T
 
 -- | Supported currencies
-data Currency = BTC | ERGO
+data Currency = BTC | ERGO | CYPRA
   deriving (Eq, Ord, Show, Read, Enum, Bounded, Generic, Flat, Serialize)
 $(deriveJSON aesonOptions ''Currency)
 
@@ -135,10 +138,42 @@ ergoSymbolUnit u = case u of
   ErgNano     -> "nERG"
 {-# INLINE ergoSymbolUnit #-}
 
+data UnitCYPRA
+  = CypraWhole
+  | CypraMilli
+  | CypraNano
+  deriving (Eq, Ord, Enum, Bounded, Show, Read, Generic)
+
+$(deriveJSON aesonOptions ''UnitCYPRA)
+instance ToJSONKey UnitCYPRA where
+instance FromJSONKey UnitCYPRA where
+
+defUnitCYPRA :: UnitCYPRA
+defUnitCYPRA = CypraWhole
+
+allUnitsCypra :: [UnitCYPRA]
+allUnitsCypra = [minBound .. maxBound]
+
+cypraResolution :: UnitCYPRA -> Int
+cypraResolution u = case u of
+  CypraWhole -> 9
+  CypraMilli -> 6
+  CypraNano  -> 0
+{-# INLINE cypraResolution #-}
+
+cypraSymbolUnit :: UnitCYPRA -> Text
+cypraSymbolUnit u = case u of
+  CypraWhole    -> "Cyp"
+  CypraMilli    -> "mCyp"
+  CypraNano     -> "nCyp"
+{-# INLINE cypraSymbolUnit #-}
+
+
 -- | Union units
 data Units = Units {
     unitBTC   :: Maybe UnitBTC
   , unitERGO  :: Maybe UnitERGO
+  , unitCYPRA :: Maybe UnitCYPRA
   } deriving (Eq, Ord, Show, Read, Generic)
 
 $(deriveJSON aesonOptions ''Units)
@@ -149,6 +184,7 @@ defUnits :: Units
 defUnits = Units {
     unitBTC   = Just BtcWhole
   , unitERGO  = Just ErgWhole
+  , unitCYPRA = Just CypraWhole
   }
 
 getUnitBTC :: Units -> UnitBTC
@@ -164,19 +200,22 @@ currencyResolution c = currencyResolutionUnit c defUnits
 
 currencyResolutionUnit :: Currency -> Units -> Int
 currencyResolutionUnit c Units{..} = case c of
-  BTC  -> btcResolution $ fromMaybe defUnitBTC unitBTC
-  ERGO -> ergoResolution $ fromMaybe defUnitERGO unitERGO
+  BTC   -> btcResolution   $ fromMaybe defUnitBTC   unitBTC
+  ERGO  -> ergoResolution  $ fromMaybe defUnitERGO  unitERGO
+  CYPRA -> cypraResolution $ fromMaybe defUnitCYPRA unitCYPRA
 {-# INLINE currencyResolutionUnit #-}
 
 symbolUnit :: Currency -> Units -> Text
 symbolUnit cur Units{..} = case cur of
-  BTC  -> btcSymbolUnit $ fromMaybe defUnitBTC unitBTC
-  ERGO -> ergoSymbolUnit $ fromMaybe defUnitERGO unitERGO
+  BTC   -> btcSymbolUnit   $ fromMaybe defUnitBTC   unitBTC
+  ERGO  -> ergoSymbolUnit  $ fromMaybe defUnitERGO  unitERGO
+  CYPRA -> cypraSymbolUnit $ fromMaybe defUnitCYPRA unitCYPRA
 
 currencyName :: Currency -> Text
 currencyName c = case c of
-  BTC -> "Bitcoin"
-  ERGO -> "Ergo"
+  BTC   -> "Bitcoin"
+  ERGO  -> "Ergo"
+  CYPRA -> "Cypra"
 {-# INLINE currencyName #-}
 
 -- | Get time of genesis block of currency
@@ -184,14 +223,16 @@ currencyGenesisTime :: Currency -> UTCTime
 currencyGenesisTime c = case c of
   BTC -> fromEpoch (1231006505 :: Int)
   ERGO -> fromEpoch (1561998777 :: Int)
+  CYPRA -> fromEpoch (0 :: Int) -- FIXME: Cypra
   where
     fromEpoch = posixSecondsToUTCTime . fromIntegral
 
 -- | Average duration between blocks
 currencyBlockDuration :: Currency -> NominalDiffTime
 currencyBlockDuration c = case c of
-  BTC  -> 600
-  ERGO -> 120
+  BTC   -> 600
+  ERGO  -> 120
+  CYPRA -> 120 -- FIXME: Cypra
 
 -- | Approx time of block
 currencyBlockTime :: Currency -> Int -> UTCTime
@@ -241,5 +282,6 @@ showMoneyUnit m units = T.pack $ printf "%f" (realToFrac (moneyToRationalUnit m 
 
 curprefix :: Currency -> Text
 curprefix cur = case cur of
-  BTC ->  "bitcoin://"
-  ERGO -> "ergo://"
+  BTC   -> "bitcoin://"
+  ERGO  -> "ergo://"
+  CYPRA -> "cypra://"

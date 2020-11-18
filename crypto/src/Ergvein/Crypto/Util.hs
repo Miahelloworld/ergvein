@@ -11,8 +11,10 @@ module Ergvein.Crypto.Util (
   , checkSum32Erg
   , encodeBase58CheckBtc
   , encodeBase58CheckErg
+  , encodeBase58CheckCyp
   , decodeBase58CheckBtc
   , decodeBase58CheckErg
+  , decodeBase58CheckCyp
   , eitherToMaybe
 ) where
 
@@ -64,6 +66,10 @@ encodeBase58CheckErg :: ByteString -> Base58
 encodeBase58CheckErg bs =
   encodeBase58 $ BS.append bs $ encode $ checkSum32Erg bs
 
+-- FIXME: Cypra. Add checksum
+encodeBase58CheckCyp :: ByteString -> Base58
+encodeBase58CheckCyp = encodeBase58
+
 -- | Decode a 'Base58'-encoded string that contains a checksum for BTC. This function
 -- returns 'Nothing' if the input string contains invalid 'Base58' characters or
 -- if the checksum fails.
@@ -79,3 +85,7 @@ decodeBase58CheckErg bs = do
   let (res, chk) = BS.splitAt (BS.length rs - 4) rs
   guard $ chk == encode (checkSum32Erg res)
   return res
+
+-- FIXME: Cypra. Add checksum
+decodeBase58CheckCyp :: Base58 -> Maybe ByteString
+decodeBase58CheckCyp = decodeBase58

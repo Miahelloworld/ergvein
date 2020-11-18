@@ -68,8 +68,9 @@ deriveCurrencyMasterPrvKey mpath rootPrvKey currency =
     let hardPath = fromMaybe (defaultDerivePath currency) mpath
         derivedPrvKey = foldl hardSubKey (unEgvRootXPrvKey rootPrvKey) hardPath
     in case currency of
-      BTC -> BtcXPrvKey derivedPrvKey
-      ERGO -> ErgXPrvKey derivedPrvKey
+      BTC   -> BtcXPrvKey derivedPrvKey
+      ERGO  -> ErgXPrvKey derivedPrvKey
+      CYPRA -> CypXPrvKey derivedPrvKey
 
 -- | Derive a BIP44 compatible public key for a specific currency.
 -- Given a parent private key /m/
@@ -82,6 +83,7 @@ deriveCurrencyMasterPubKey mpath rootPrvKey currency =
     in case currency of
       ERGO -> ErgXPubKey derivedPubKey ""
       BTC -> BtcXPubKey derivedPubKey ""
+      CYPRA -> undefined -- FIXME: Cypra
 
 -- | Derive a BIP44 compatible private key with a given purpose (external or internal) and index.
 -- Given a parent private key /m/, purpose /p/ and an index /i/, this function will compute /m\/p\/i/.
@@ -95,6 +97,7 @@ derivePrvKey masterKey keyPurpose index =
   in case masterKey of
     BtcXPrvKey _ -> BtcXPrvKey derivedKey
     ErgXPrvKey _ -> ErgXPrvKey derivedKey
+    CypXPrvKey _ -> CypXPrvKey derivedKey
 
 -- | Derive a BIP44 compatible public key with a given purpose (external or internal) and index.
 -- Given a parent public key /m/, purpose /p/ and an index /i/, this function will compute /m\/p\/i/.
@@ -107,3 +110,4 @@ derivePubKey masterKey keyPurpose index =
   in case masterKey of
     ErgXPubKey k _ -> ErgXPubKey (derivedKey k) ""
     BtcXPubKey k _ -> BtcXPubKey (derivedKey k) ""
+    CypXPubKey k _ -> CypXPubKey (derivedKey k) ""

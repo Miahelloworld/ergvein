@@ -65,6 +65,7 @@ data ErgAddress
 data EgvAddress
   = BtcAddress { getBtcAddr :: !BtcAddress }
   | ErgAddress { getErgAddr :: !ErgAddress }
+  | CypAddress -- FIXME: Cypra
   deriving (Eq, Generic, Show, Read, Serialize)
 
 -- | Binary serializer for 'Base58' ERGO addresses.
@@ -93,7 +94,7 @@ base58GetErg net = do
 
 btcAddrToString' :: BtcNetwork -> BtcAddress -> Text
 btcAddrToString' net addr = case HA.addrToString net addr of
-  Nothing -> undefined -- FIXME
+  Nothing -> undefined -- FIXME: Cypra
   Just s -> s
 
 btcAddrToString :: BtcAddress -> Text
@@ -108,10 +109,12 @@ egvAddrCurrency :: EgvAddress -> Currency
 egvAddrCurrency addr = case addr of
   BtcAddress{} -> BTC
   ErgAddress{} -> ERGO
+  CypAddress{} -> CYPRA
 
 egvAddrToString :: EgvAddress -> Text
 egvAddrToString (BtcAddress addr) = btcAddrToString addr
 egvAddrToString (ErgAddress addr) = ergAddrToString addr
+egvAddrToString (CypAddress     ) = undefined -- FIXME: Cypra
 
 btcAddrFromString :: Text -> Maybe BtcAddress
 btcAddrFromString = HA.stringToAddr net
@@ -122,8 +125,9 @@ ergAddrFromString t = eitherToMaybe . runGet (base58GetErg net) =<< decodeBase58
   where net = getErgNetwork $ getCurrencyNetwork ERGO
 
 egvAddrFromString :: Currency -> Text -> Maybe EgvAddress
-egvAddrFromString BTC  addr = BtcAddress <$> btcAddrFromString addr
-egvAddrFromString ERGO addr = ErgAddress <$> ergAddrFromString addr
+egvAddrFromString BTC   addr = BtcAddress <$> btcAddrFromString addr
+egvAddrFromString ERGO  addr = ErgAddress <$> ergAddrFromString addr
+egvAddrFromString CYPRA _    = Just CypAddress -- FIXME: Cypra
 
 egvAddrToJSON :: EgvAddress -> Value
 egvAddrToJSON = String . egvAddrToString
@@ -138,6 +142,7 @@ egvAddrFromJSON = \case
     case ergAddrFromString t of
       Nothing -> fail "could not decode address"
       Just x  -> return $ ErgAddress x
+  CYPRA -> undefined -- FIXME: Cypra
 
 instance ToJSON EgvAddress where
   toJSON egvAddr@(BtcAddress _) = object [
@@ -148,6 +153,7 @@ instance ToJSON EgvAddress where
       "currency" .= toJSON ERGO
     , "address"  .= egvAddrToJSON egvAddr
     ]
+  toJSON CypAddress = undefined -- FIXME: Cypra
 
 instance FromJSON EgvAddress where
   parseJSON = withObject "EgvAddress" $ \o -> do

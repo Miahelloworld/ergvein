@@ -4,6 +4,7 @@ module Ergvein.Types.Network (
     BtcNetwork
   , Network(..)
   , ErgNetwork(..)
+  , CypNetwork(..)
   , EgvNetwork(..)
   , btc
   , btcTest
@@ -42,9 +43,18 @@ data ErgNetwork = ErgNetwork
   , getErgBip44Coin                :: !Word32
   } deriving (Eq, Generic)
 
+data CypNetwork = CypNetwork
+  { getCypExtSecretPrefix          :: !Word32
+    -- | BIP44 derivation path root
+  , getCypExtPubKeyPrefix          :: !Word32
+    -- | prefix for extended private key
+  }
+  deriving (Eq, Generic)
+
 data EgvNetwork
   = EgvBtcNetwork {getBtcNetwork :: BtcNetwork}
   | EgvErgNetwork {getErgNetwork :: ErgNetwork}
+  | EgvCypNetwork {getCypNetwork :: CypNetwork}
   deriving (Eq, Generic)
 
 -- | Ergo network. Symbol: ERG.
@@ -83,6 +93,7 @@ getCurrencyNetwork :: Currency -> EgvNetwork
 getCurrencyNetwork t = case t of
   BTC -> EgvBtcNetwork btcTest
   ERGO -> EgvErgNetwork ergTest
+  CYPRA -> EgvCypNetwork (CypNetwork 1 1) -- FIXME: Cypra
 
 getCurrencyIndex :: Currency -> KeyIndex
 getCurrencyIndex = const 1
@@ -93,9 +104,11 @@ getCurrencyNetwork :: Currency -> EgvNetwork
 getCurrencyNetwork t = case t of
   BTC -> EgvBtcNetwork btc
   ERGO -> EgvErgNetwork erg
+  CYPRA -> EgvCypNetwork (CypNetwork 1 1) -- FIXME: Cypra
 
 getCurrencyIndex :: Currency -> KeyIndex
 getCurrencyIndex t = case t of
   BTC -> getBip44Coin btc
   ERGO -> getErgBip44Coin erg
+  CYPRA -> undefined -- FIXME: Cypra
 #endif
