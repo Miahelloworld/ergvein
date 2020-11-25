@@ -6,4 +6,32 @@ in rec {
   zlibSys = self.callPackage ../derivations/zlibSys.nix {};
   lmdbSys = self.callPackage ../derivations/lmdbSys.nix {};
   leveldb = self.callPackage ../derivations/leveldb.nix {};
+  # Haskell overlay
+  haskell = super.haskell // {
+    packageOverrides = haskOverrides;
+  };
+  haskOverrides = hsNew: hsOld:
+    let
+      hschainRev = {
+        "url" = "https://github.com/hexresearch/hschain";
+        "rev" = "4fa995363cc5d88da69927aefe990b8a110eb71c";
+        "ref" = "master";
+      };
+      callHSChain = name: hsNew.callCabal2nixWithOptions name
+        (builtins.fetchGit hschainRev)
+        ("--subpath " + name)
+        {};
+    in
+      {
+        hschain-control  = callHSChain "hschain-control";
+        hschain-config   = callHSChain "hschain-config";
+        hschain-mempool  = callHSChain "hschain-mempool";
+        hschain-merkle   = callHSChain "hschain-merkle";
+        hschain-logger   = callHSChain "hschain-logger";
+        hschain-crypto   = callHSChain "hschain-crypto";
+        hschain-types    = callHSChain "hschain-types";
+        hschain-net      = callHSChain "hschain-net";
+        hschain-db       = callHSChain "hschain-db";
+        hschain-PoW      = callHSChain "hschain-PoW";
+      };
 }
