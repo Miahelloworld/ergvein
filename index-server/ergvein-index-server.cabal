@@ -12,7 +12,7 @@ author:              Anton Gushcha, Aminion, Vladimir Krutkin, Levon Oganyan
 maintainer:          Anton Gushcha <ncrashed@protonmail.com>, Vladimir Krutkin <krutkinvs@gmail.com>
 
 library
-  ghc-options:         -Wall
+  ghc-options:         -Wall -Wno-unused-do-bind -Wno-orphans
   hs-source-dirs:      src
   exposed-modules:
     Ergvein.Index.Server.App

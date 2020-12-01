@@ -41,14 +41,16 @@ class EgvSerialize a where
 
 getTxHashLength :: Currency -> Int
 getTxHashLength cur = case cur of
-  ERGO -> 0 --TODO: Add Ergo lengths
+  ERGO -> 0 --TODO: Add Ergo lengths  
   BTC -> 32
+  CYPRA -> undefined -- FIXME: Cypra
 {-# INLINE getTxHashLength #-}
 
 getBlockHashLength :: Currency -> Int
 getBlockHashLength cur = case cur of
   ERGO -> 0 --TODO: Add Ergo lengths
   BTC -> 32
+  CYPRA -> undefined -- FIXME: Cypra
 {-# INLINE getBlockHashLength #-}
 
 parseVarInt :: Parser Word64
