@@ -21,6 +21,7 @@ library
     Ergvein.Index.Server.BlockchainScanning.Common
     Ergvein.Index.Server.BlockchainScanning.Ergo
     Ergvein.Index.Server.BlockchainScanning.Types
+    Ergvein.Index.Server.BlockchainScanning.Cypra
     Ergvein.Index.Server.Config
     Ergvein.Index.Server.DB
     Ergvein.Index.Server.DB.Monad
