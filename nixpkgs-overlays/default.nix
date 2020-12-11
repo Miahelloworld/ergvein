@@ -33,5 +33,11 @@ in rec {
         hschain-net      = callHSChain "hschain-net";
         hschain-db       = callHSChain "hschain-db";
         hschain-PoW      = callHSChain "hschain-PoW";
+        # Newer versions
+        semigroups    = hsNew.callPackage ../derivations/hackage-semigroups.nix {};
+        direct-sqlite = hsNew.callPackage ../derivations/hackage-direct-sqlite.nix {};
+        sqlite-simple = hsNew.callPackage ../derivations/hackage-sqlite-simple.nix {};
+        data-fix      = hsNew.callPackage ../derivations/hackage-data-fix.nix {};
+        vector        = hsNew.callPackage ../derivations/hackage-vector.nix {};
       };
 }
