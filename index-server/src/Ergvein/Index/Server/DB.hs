@@ -2,12 +2,12 @@
 module Ergvein.Index.Server.DB
   (
     DBTag(..)
-  , openDb
+  , withOpenDb
   ) where
 
 import Conduit
-import Control.Exception
 import Control.Monad
+import Control.Monad.Catch
 import Data.Default
 import Database.LevelDB.Base
 import System.Directory
@@ -22,19 +22,19 @@ data MyException = DbVersionMismatch
 
 instance Exception MyException
 
-openDb :: (MonadIO m) => Bool -> DBTag -> FilePath -> m DB
-openDb overwriteDbVerOnMismatch dbtag dbDirectory = do
+withOpenDb :: (MonadIO m, MonadMask m) => Bool -> DBTag -> FilePath -> (DB -> m a) -> m a
+withOpenDb overwriteDbVerOnMismatch dbtag dbDirectory cont = do
   canonicalPathDirectory <- liftIO $ canonicalizePath dbDirectory
   dbStatePresent <- liftIO $ doesDirectoryExist canonicalPathDirectory
   liftIO $ unless dbStatePresent $ createDirectory canonicalPathDirectory
-  db <- open canonicalPathDirectory def {createIfMissing = True }
-  if overwriteDbVerOnMismatch || not dbStatePresent then do
-    put db def schemaVersionRecKey schemaVersion
-  else do
-    dbSchemaVersion <- get db def schemaVersionRecKey
-    unless (dbSchemaVersion == Just schemaVersion) $
-      throw DbVersionMismatch
-  pure db
+  withDB canonicalPathDirectory def{createIfMissing = True } $ \db -> do
+    if overwriteDbVerOnMismatch || not dbStatePresent then do
+      put db def schemaVersionRecKey schemaVersion
+    else do
+      dbSchemaVersion <- get db def schemaVersionRecKey
+      unless (dbSchemaVersion == Just schemaVersion) $
+        liftIO $ throwM DbVersionMismatch
+    cont db
   where
     (schemaVersionRecKey, schemaVersion) = case dbtag of
       DBFilters -> (DBF.schemaVersionRecKey, DBF.schemaVersion)

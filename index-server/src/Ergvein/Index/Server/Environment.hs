@@ -86,51 +86,52 @@ newServerEnv :: (MonadIO m, MonadLogger m, MonadMask m, MonadBaseControl IO m)
   -> Bool               -- ^ flag, def False: do not drop Indexer's database
   -> BitcoinApi.Client  -- ^ RPC connection to the bitcoin node
   -> Config             -- ^ Contents of the config file
-  -> m ServerEnv
-newServerEnv useTcp noDropFilters optsNoDropIndexers btcClient cfg@Config{..} = do
+  -> (ServerEnv -> m a)
+  -> m a
+newServerEnv useTcp noDropFilters optsNoDropIndexers btcClient cfg@Config{..} cont = do
     logger <- liftIO newChan
     liftIO $ hSetBuffering stdout LineBuffering
     void $ liftIO $ forkIO $ runStdoutLoggingT $ unChanLoggingT logger
-    filtersDBCntx  <- openDb noDropFilters DBFilters cfgFiltersDbPath
-    indexerDBCntx  <- openDb optsNoDropIndexers DBIndexer cfgIndexerDbPath
-    ergoNodeClient <- liftIO $ ErgoApi.newClient cfgERGONodeHost cfgERGONodePort
-    tlsManager     <- liftIO $ newTlsManager
-    feeEstimates   <- liftIO $ newTVarIO M.empty
-    shutdownVar    <- liftIO $ newTVarIO False
-    openConns      <- liftIO $ newTVarIO M.empty
-    broadChan      <- liftIO newBroadcastTChanIO
-    let bitcoinNodeNetwork = if cfgBTCNodeIsTestnet then HK.btcTest else HK.btc
-    descDiscoveryRequisites <- liftIO $ discoveryRequisites cfg
-    btcsock <- if useTcp then do
-      btcsock <- connectBtc bitcoinNodeNetwork cfgBTCNodeTCPHost (show cfgBTCNodeTCPPort) shutdownVar
-      liftIO $ do
-        isUp <- atomically $ dupTChan $ btcSockOnActive btcsock
-        b <- readTVarIO $ btcSockIsActive btcsock
-        unless b $ fix $ \next -> do
-          b' <- atomically $ readTChan isUp
-          unless b' next
-      pure btcsock
-      else dummyBtcSock bitcoinNodeNetwork
-    btcSeq <- liftIO $ runStdoutLoggingT $ runReaderT (loadRollbackSequence BTC) indexerDBCntx
-    btcSeqVar <- liftIO $ newTVarIO $ unRollbackSequence btcSeq
-    pure ServerEnv
-      { envServerConfig            = cfg
-      , envLogger                  = logger
-      , envFiltersDBContext        = filtersDBCntx
-      , envIndexerDBContext        = indexerDBCntx
-      , envBitcoinNodeNetwork      = bitcoinNodeNetwork
-      , envErgoNodeClient          = ergoNodeClient
-      , envClientManager           = tlsManager
-      , envBitcoinClient           = btcClient
-      , envBitcoinSocket           = btcsock
-      , envBtcConScheme            = if useTcp then BtcConTCP else BtcConRPC
-      , envBtcRollback             = btcSeqVar
-      , envPeerDiscoveryRequisites = descDiscoveryRequisites
-      , envFeeEstimates            = feeEstimates
-      , envShutdownFlag            = shutdownVar
-      , envOpenConnections         = openConns
-      , envBroadcastChannel        = broadChan
-      }
+    withOpenDb noDropFilters DBFilters cfgFiltersDbPath $ \filtersDBCntx -> do
+      withOpenDb optsNoDropIndexers DBIndexer cfgIndexerDbPath $ \indexerDBCntx -> do
+        ergoNodeClient <- liftIO $ ErgoApi.newClient cfgERGONodeHost cfgERGONodePort
+        tlsManager     <- liftIO $ newTlsManager
+        feeEstimates   <- liftIO $ newTVarIO M.empty
+        shutdownVar    <- liftIO $ newTVarIO False
+        openConns      <- liftIO $ newTVarIO M.empty
+        broadChan      <- liftIO newBroadcastTChanIO
+        let bitcoinNodeNetwork = if cfgBTCNodeIsTestnet then HK.btcTest else HK.btc
+        descDiscoveryRequisites <- liftIO $ discoveryRequisites cfg
+        btcsock <- if useTcp then do
+          btcsock <- connectBtc bitcoinNodeNetwork cfgBTCNodeTCPHost (show cfgBTCNodeTCPPort) shutdownVar
+          liftIO $ do
+            isUp <- atomically $ dupTChan $ btcSockOnActive btcsock
+            b <- readTVarIO $ btcSockIsActive btcsock
+            unless b $ fix $ \next -> do
+              b' <- atomically $ readTChan isUp
+              unless b' next
+          pure btcsock
+          else dummyBtcSock bitcoinNodeNetwork
+        btcSeq <- liftIO $ runStdoutLoggingT $ runReaderT (loadRollbackSequence BTC) indexerDBCntx
+        btcSeqVar <- liftIO $ newTVarIO $ unRollbackSequence btcSeq
+        cont ServerEnv
+          { envServerConfig            = cfg
+          , envLogger                  = logger
+          , envFiltersDBContext        = filtersDBCntx
+          , envIndexerDBContext        = indexerDBCntx
+          , envBitcoinNodeNetwork      = bitcoinNodeNetwork
+          , envErgoNodeClient          = ergoNodeClient
+          , envClientManager           = tlsManager
+          , envBitcoinClient           = btcClient
+          , envBitcoinSocket           = btcsock
+          , envBtcConScheme            = if useTcp then BtcConTCP else BtcConRPC
+          , envBtcRollback             = btcSeqVar
+          , envPeerDiscoveryRequisites = descDiscoveryRequisites
+          , envFeeEstimates            = feeEstimates
+          , envShutdownFlag            = shutdownVar
+          , envOpenConnections         = openConns
+          , envBroadcastChannel        = broadChan
+          }
 
 -- | Log exceptions at Error severity
 logOnException :: (MonadIO m, MonadLogger m, MonadCatch m) => Text -> m a -> m a
