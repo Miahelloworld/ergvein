@@ -47,44 +47,6 @@ data ScanKeyBox = ScanKeyBox {
 , scanBox'purpose :: !KeyPurpose
 , scanBox'index   :: !Int
 } deriving (Show)
-getXPrvKey (EgvCypNetwork net) = do
-  ver <- getWord32be
-  unless (ver == getCypExtSecretPrefix net) $ fail
-      "Get: Invalid version for extended private key"
-  XPrvKey <$> getWord8
-          <*> getWord32be
-          <*> getWord32be
-          <*> get
-          <*> getPadPrvKey
-putXPrvKey (EgvCypNetwork net) k = do
-  putWord32be  $ getCypExtSecretPrefix net
-  putWord8     $ xPrvDepth k
-  putWord32be  $ xPrvParent k
-  putWord32be  $ xPrvIndex k
-  put          $ xPrvChain k
-  putPadPrvKey $ xPrvKey k
-getXPubKey (EgvCypNetwork net) = do
-  ver <- getWord32be
-  unless (ver == getCypExtPubKeyPrefix net) $ fail
-      "Get: Invalid version for extended public key"
-  XPubKey <$> getWord8
-          <*> getWord32be
-          <*> getWord32be
-          <*> get
-          <*> (pubKeyPoint <$> get)
-
-putXPubKey (EgvCypNetwork net) k = do
-  putWord32be $ getCypExtPubKeyPrefix net
-  putWord8    $ xPubDepth k
-  putWord32be $ xPubParent k
-  putWord32be $ xPubIndex k
-  put         $ xPubChain k
-  put         $ wrapPubKey True (xPubKey k)
-
-xPrvExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPrvKey n
-xPubExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPubKey n
-xPrvImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckCyp
-xPubImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckCyp
 
 -- ====================================================================
 --      Utils

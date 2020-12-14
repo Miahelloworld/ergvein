@@ -61,7 +61,10 @@ instance Serialize EgvRootXPrvKey where
     putPadPrvKey $ xPrvKey k
 
 -- | Wrapper around XPrvKey for easy to/from json manipulations
-data EgvXPrvKey = BtcXPrvKey { btcXPrvKey :: !XPrvKey} | ErgXPrvKey {ergXPrvKey :: !XPrvKey}
+data EgvXPrvKey
+  = BtcXPrvKey { btcXPrvKey :: !XPrvKey }
+  | ErgXPrvKey { ergXPrvKey :: !XPrvKey }
+  | CypXPrvKey { cypXPrvKey :: !XPrvKey }
   deriving (Eq, Show, Read)
 
 instance Serialize EgvXPrvKey where
@@ -69,8 +72,9 @@ instance Serialize EgvXPrvKey where
     cur <- get
     k <- getXPrvKey (getCurrencyNetwork cur)
     pure $ case cur of
-      BTC -> BtcXPrvKey k
-      ERGO -> ErgXPrvKey k
+      BTC   -> BtcXPrvKey k
+      ERGO  -> ErgXPrvKey k
+      CYPRA -> CypXPrvKey k
   put key = case key of
     ErgXPrvKey k -> do
       put ERGO
@@ -78,6 +82,9 @@ instance Serialize EgvXPrvKey where
     BtcXPrvKey k -> do
       put BTC
       putXPrvKey (getCurrencyNetwork BTC) k
+    CypXPrvKey k -> do
+      put CYPRA
+      putXPrvKey (getCurrencyNetwork CYPRA) k
 
 -- ====================================================================
 --      Public keys: EgvRootXPubKey, EgvXPubKey
@@ -111,6 +118,10 @@ data EgvXPubKey =
       btcXPubKey   :: !XPubKey
     , btcXPubLabel :: !Text
     }
+  | CypXPubKey {
+      cypXPubKey   :: !XPubKey
+    , cypXPubLabel :: !Text
+    }
   deriving (Eq, Show, Read)
 
 instance Serialize EgvXPubKey where
@@ -119,8 +130,9 @@ instance Serialize EgvXPubKey where
     k <- getXPubKey (getCurrencyNetwork cur)
     l <- fmap pack get
     pure $ case cur of
-      BTC -> BtcXPubKey k l
-      ERGO -> ErgXPubKey k l
+      BTC   -> BtcXPubKey k l
+      ERGO  -> ErgXPubKey k l
+      CYPRA -> CypXPubKey k l
   put key = case key of
     ErgXPubKey k l -> do
       put ERGO
@@ -129,6 +141,10 @@ instance Serialize EgvXPubKey where
     BtcXPubKey k l -> do
       put BTC
       putXPubKey (getCurrencyNetwork BTC) k
+      put $ unpack l
+    CypXPubKey k l -> do
+      put CYPRA
+      putXPubKey (getCurrencyNetwork CYPRA) k
       put $ unpack l
 
 instance Ord EgvXPubKey where
@@ -139,9 +155,11 @@ instance Ord EgvXPubKey where
       (c1, k1, _l1) =  case key1 of
         ErgXPubKey k l -> (ERGO, k, l)
         BtcXPubKey k l -> (BTC, k, l)
+        CypXPubKey k l -> (CYPRA, k, l)
       (c2, k2, _l2) =  case key2 of
         ErgXPubKey k l -> (ERGO, k, l)
         BtcXPubKey k l -> (BTC, k, l)
+        CypXPubKey k l -> (CYPRA, k, l)
 
 -- ====================================================================
 --      Getters and putters for base crypto keys
@@ -167,6 +185,15 @@ getXPrvKey (EgvErgNetwork net) = do
           <*> getWord32be
           <*> get
           <*> getPadPrvKey
+getXPrvKey (EgvCypNetwork net) = do
+  ver <- getWord32be
+  unless (ver == getCypExtSecretPrefix net) $ fail
+      "Get: Invalid version for extended private key"
+  XPrvKey <$> getWord8
+          <*> getWord32be
+          <*> getWord32be
+          <*> get
+          <*> getPadPrvKey
 
 -- | Serialize an extended private key.
 putXPrvKey :: EgvNetwork -> Putter XPrvKey
@@ -179,6 +206,13 @@ putXPrvKey (EgvBtcNetwork net) k = do
   putPadPrvKey $ xPrvKey k
 putXPrvKey (EgvErgNetwork net) k = do
   putWord32be  $ getErgExtSecretPrefix net
+  putWord8     $ xPrvDepth k
+  putWord32be  $ xPrvParent k
+  putWord32be  $ xPrvIndex k
+  put          $ xPrvChain k
+  putPadPrvKey $ xPrvKey k
+putXPrvKey (EgvCypNetwork net) k = do
+  putWord32be  $ getCypExtSecretPrefix net
   putWord8     $ xPrvDepth k
   putWord32be  $ xPrvParent k
   putWord32be  $ xPrvIndex k
@@ -205,6 +239,15 @@ getXPubKey (EgvErgNetwork net) = do
           <*> getWord32be
           <*> get
           <*> (pubKeyPoint <$> get)
+getXPubKey (EgvCypNetwork net) = do
+  ver <- getWord32be
+  unless (ver == getCypExtPubKeyPrefix net) $ fail
+      "Get: Invalid version for extended public key"
+  XPubKey <$> getWord8
+          <*> getWord32be
+          <*> getWord32be
+          <*> get
+          <*> (pubKeyPoint <$> get)
 
 -- | Serialize an extended public key.
 putXPubKey :: EgvNetwork -> Putter XPubKey
@@ -222,25 +265,36 @@ putXPubKey (EgvErgNetwork net) k = do
   putWord32be $ xPubIndex k
   put         $ xPubChain k
   put         $ wrapPubKey True (xPubKey k)
+putXPubKey (EgvCypNetwork net) k = do
+  putWord32be $ getCypExtPubKeyPrefix net
+  putWord8    $ xPubDepth k
+  putWord32be $ xPubParent k
+  putWord32be $ xPubIndex k
+  put         $ xPubChain k
+  put         $ wrapPubKey True (xPubKey k)
 
 -- | Exports an extended private key to the BIP32 key export format ('Base58').
 xPrvExport :: EgvNetwork -> XPrvKey -> Base58
 xPrvExport n@(EgvBtcNetwork _) = encodeBase58CheckBtc . runPut . putXPrvKey n
 xPrvExport n@(EgvErgNetwork _) = encodeBase58CheckErg . runPut . putXPrvKey n
+xPrvExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPrvKey n
 
 -- | Exports an extended public key to the BIP32 key export format ('Base58').
 xPubExport :: EgvNetwork -> XPubKey -> Base58
 xPubExport n@(EgvBtcNetwork _) = encodeBase58CheckBtc . runPut . putXPubKey n
 xPubExport n@(EgvErgNetwork _) = encodeBase58CheckErg . runPut . putXPubKey n
+xPubExport n@(EgvCypNetwork _) = encodeBase58CheckCyp . runPut . putXPubKey n
 
 -- | Decodes a BIP32 encoded extended private key. This function will fail if
 -- invalid base 58 characters are detected or if the checksum fails.
 xPrvImport :: EgvNetwork -> Base58 -> Maybe XPrvKey
 xPrvImport n@(EgvBtcNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckBtc
 xPrvImport n@(EgvErgNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckErg
+xPrvImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPrvKey n) <=< decodeBase58CheckCyp
 
 -- | Decodes a BIP32 encoded extended public key. This function will fail if
 -- invalid base 58 characters are detected or if the checksum fails.
 xPubImport :: EgvNetwork -> Base58 -> Maybe XPubKey
 xPubImport n@(EgvBtcNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckBtc
 xPubImport n@(EgvErgNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckErg
+xPubImport n@(EgvCypNetwork _) = eitherToMaybe . runGet (getXPubKey n) <=< decodeBase58CheckCyp
