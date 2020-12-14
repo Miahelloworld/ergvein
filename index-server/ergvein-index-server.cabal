@@ -126,6 +126,11 @@ library
       , ergvein-wallet-filters
       , ergvein-wallet-types
       --
+      , hschain-control
+      , hschain-net
+      , hschain-db
+      , hschain-logger
+      , hschain-PoW
       , hschain-pow-func
       , hschain-utxo-lang
       , hschain-utxo-pow-node

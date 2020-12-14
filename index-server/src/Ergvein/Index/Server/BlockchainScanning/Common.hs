@@ -27,6 +27,7 @@ import Ergvein.Types.Transaction
 import qualified Data.Text as T
 import qualified Ergvein.Index.Server.BlockchainScanning.Bitcoin as BTCScanning
 import qualified Ergvein.Index.Server.BlockchainScanning.Ergo    as ERGOScanning
+import qualified Ergvein.Index.Server.BlockchainScanning.Cypra   as CYPRAScanning
 
 scanningInfo :: ServerM [ScanProgressInfo]
 scanningInfo = catMaybes <$> mapM nfo allCurrencies
@@ -119,6 +120,7 @@ broadcastFilter BlockMetaInfo{..} = do
 blockchainScanning :: ServerM [Thread]
 blockchainScanning = sequenceA
   [ {- scannerThread BTC  BTCScanning.blockInfo -}
+    CYPRAScanning.scanThread
   ]
 
 feesThread :: ServerM () -> ServerM Thread

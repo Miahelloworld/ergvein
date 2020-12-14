@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingVia #-}
 module Ergvein.Index.Server.Monad where
 
 import Control.Concurrent.STM
@@ -10,6 +11,7 @@ import Control.Monad.Reader
 import Control.Monad.Trans.Control
 import Prometheus (MonadMonitor(..))
 
+import HSChain.Control.Class
 import Ergvein.Index.Client
 import Ergvein.Index.Protocol.Types (Message)
 import Ergvein.Index.Server.BlockchainScanning.BitcoinApiMonad
@@ -23,6 +25,7 @@ import qualified Network.Ergo.Api.Client     as ErgoApi
 
 newtype ServerM a = ServerM { unServerM :: ReaderT ServerEnv (LoggingT IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadLogger, MonadReader ServerEnv, MonadThrow, MonadCatch, MonadMask, MonadBase IO, MonadMonitor)
+  deriving MonadFork via ReaderT ServerEnv (ReaderT (Loc -> LogSource -> LogLevel -> LogStr -> IO ()) IO)
 
 instance MonadMonitor m => MonadMonitor (LoggingT m) where
   doIO = lift . doIO
