@@ -13,7 +13,6 @@ module Ergvein.Index.Server.DB.Queries
   -- * Filters db queries
   , getScannedHeight
   , setScannedHeight
-  , addBlockMetaInfos
   -- * Combined queries
   , addBlockInfo
   -- * Rollback related
@@ -48,10 +47,11 @@ import Ergvein.Index.Server.Utils
 import Ergvein.Types.Currency as Currency
 import Ergvein.Types.Transaction
 
-import qualified Data.Map.Strict  as Map
-import qualified Data.Sequence    as Seq
-import qualified Data.Text        as T
-import qualified Database.LevelDB as LDB
+import qualified Data.Map.Strict                    as Map
+import qualified Data.Sequence                      as Seq
+import qualified Data.Text                          as T
+import qualified Database.LevelDB                   as LDB
+import qualified Network.Haskoin.Transaction        as HK
 
 getActualPeers :: (HasIndexerDB m, MonadLogger m, HasDiscoveryRequisites m) =>  m [Address]
 getActualPeers = do
@@ -120,13 +120,14 @@ initIndexerDb db = do
 addBlockInfo :: (HasBtcRollback m, HasFiltersDB m, HasIndexerDB m, MonadLogger m, MonadBaseControl IO m) => BlockInfo -> m ()
 addBlockInfo (BlockInfo meta spent txinfos) = do
   db <- getFiltersDb
-  write db def $ txInfosBatch <> metaInfosBatch <> heightWrite
-  insertRollback cur $ RollbackRecItem txHashes spent prevHash (height -1)
+  write db def $ txInfosBatch <> spentInfoBatch <> metaInfosBatch <> heightWrite
+  insertRollback cur $ RollbackRecItem txHashes prevHash (height -1)
   setLastScannedBlock cur blkHash
   where
     BlockMetaInfo cur height blkHash prevHash filt = meta
-    txHashes       = txHash <$> txinfos
+    txHashes       = txInfoHash <$> txinfos
     txInfosBatch   = putTxInfosAsRecs cur height txinfos
+    spentInfoBatch = putStoredTxInfosAsRecs cur spent
     metaInfosBatch = putItem cur (metaRecKey (cur, height)) $ BlockMetaRec blkHash filt
     heightWrite    = putItem cur (scannedHeightTxKey cur) $ ScannedHeightRec height
 
@@ -140,15 +141,6 @@ getLastScannedBlock currency = do
   db <- getIndexerDb
   maybeLastScannedBlock <- getParsed currency "lastScannedBlockHeaderHashRecKey" db $ lastScannedBlockHeaderHashRecKey currency
   pure $ lastScannedBlockHeaderHashRecHash <$> maybeLastScannedBlock
-
--- Currency should be consistent with currency in BlockInfoMeta
-addBlockMetaInfos :: (HasFiltersDB m, MonadLogger m) => Currency -> [BlockMetaInfo] -> m ()
-addBlockMetaInfos currency infos = do
-  db <- getFiltersDb
-  write db def $ putItems currency keySelector valueSelector infos
-  where
-    keySelector   info = metaRecKey (blockMetaCurrency info, blockMetaBlockHeight info)
-    valueSelector info = BlockMetaRec (blockMetaHeaderHash info) (blockMetaAddressFilter info)
 
 btcRollbackSize :: Int
 btcRollbackSize = 64
@@ -165,12 +157,9 @@ insertBtcRollback ritem = do
   rollVar <- getBtcRollbackVar
   rse <- liftIO $ readTVarIO rollVar
   let rse' = ritem Seq.<| rse
-  if Seq.length rse' <= btcRollbackSize
-    then liftIO $ atomically $ writeTVar rollVar rse'
-    else do
-      let rest Seq.:> lst = Seq.viewr rse'
-      finalizeRollbackItem Currency.BTC lst
-      liftIO $ atomically $ writeTVar rollVar rest
+  liftIO $ atomically $ writeTVar rollVar $
+    if Seq.length rse' <= btcRollbackSize then rse'
+    else let rest Seq.:> _ = Seq.viewr rse' in rest
 
 storeRollbackSequence :: (HasIndexerDB m, MonadLogger m) => Currency -> RollbackSequence -> m ()
 storeRollbackSequence cur rse = do
@@ -182,24 +171,6 @@ loadRollbackSequence cur = do
   idb <- getIndexerDb
   mseq <- getParsed cur "loadRollbackSequence" idb $ rollbackKey cur
   pure $ fromMaybe (RollbackSequence mempty) mseq
-
-finalizeRollbackItem :: (HasFiltersDB m, MonadLogger m, MonadBaseControl IO m) => Currency -> RollbackRecItem -> m ()
-finalizeRollbackItem _cur (RollbackRecItem _ outs _ _) = do
-  fdb <- getFiltersDb
-  let outsl = mkChunks 100 $ Map.toList outs
-  upds <- fmap (mconcat . mconcat) $ mapConcurrently (traverse (mkupds fdb)) outsl
-  write fdb def upds
-  where
-    maybe' mv c = maybe [] c mv
-    either' ev c = either (const []) c ev
-    mkupds fdb (th, sp) = do
-      let k = txMetaKey th
-      mraw <- get fdb def k
-      pure $ maybe' mraw $ \bs -> either' (egvDeserialize BTC bs) $ \meta -> let
-        o = (txMetaUnspent meta) - sp
-        in if o <= 0
-          then [LDB.Put k $ egvSerialize BTC $ meta {txMetaUnspent = 0}, LDB.Del $ txRawKey th]
-          else [LDB.Put k $ egvSerialize BTC $ meta {txMetaUnspent = o}]
 
 performRollback :: (HasFiltersDB m, HasIndexerDB m, HasBtcRollback m, MonadLogger m) => Currency -> m Int
 performRollback cur = case cur of
@@ -221,7 +192,7 @@ performBtcRollback = do
       setScannedHeight cur $ rollbackPrevHeight lst
 
   let spentTxIds = fold $ rollbackItemAdded <$> rse
-  let dels = mconcat $ flip fmap spentTxIds $ \th -> [LDB.Del (txRawKey th), LDB.Del (txMetaKey th)]
+  let dels = flip fmap spentTxIds $ LDB.Del . txRecKey
   write fdb def dels
   write idb def $ pure clearSeq
   liftIO $ atomically $ writeTVar rollVar mempty

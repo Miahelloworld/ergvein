@@ -1,5 +1,6 @@
 module Ergvein.Index.Server.BlockchainScanning.Types where
 
+import Ergvein.Index.Server.DB.Schema.Filters
 import Ergvein.Types.Currency
 import Ergvein.Types.Transaction
 
@@ -10,6 +11,8 @@ import Data.Word
 import GHC.Generics
 import Data.Map.Strict (Map)
 
+import qualified Network.Haskoin.Transaction        as HK
+
 data BlockMetaInfo = BlockMetaInfo
   { blockMetaCurrency      :: !Currency
   , blockMetaBlockHeight   :: !BlockHeight
@@ -19,16 +22,25 @@ data BlockMetaInfo = BlockMetaInfo
   }
 
 data TxInfo = TxInfo
-  { txHash         :: TxHash
-  , txBytes        :: ByteString
-  , txOutputsCount :: Word32
+  { txInfoHash         :: !TxHash
+  , txInfoBytes        :: !ByteString
+  , txInfoUnspent      :: !Word32
   } deriving (Show, Generic)
 
 instance NFData TxInfo
 
+data TxInfoStored = TxInfoStored
+  { txStoredHash    :: !TxHash
+  , txStoredTx      :: !HK.Tx
+  , txStoredHeight  :: !Word32
+  , txStoredMeta    :: !(Maybe TxRecMeta)
+  } deriving (Generic)
+
+instance NFData TxInfoStored
+
 data BlockInfo = BlockInfo
   { blockInfoMeta       :: !BlockMetaInfo
-  , spentTxOutputs      :: !(Map TxHash Word32)
+  , spentTxRecs         :: ![TxInfoStored]
   , blockContentTxInfos :: ![TxInfo]
   }
 

@@ -43,61 +43,79 @@ import qualified Network.Haskoin.Transaction        as HK
 
 blockTxInfos :: (BitcoinApiMonad m, MonadBaseControl IO m, HasFiltersDB m, MonadLogger m, MonadBaseControl IO m) => BlockHeight -> HK.Block -> m BlockInfo
 blockTxInfos txBlockHeight block = do
-  let (txInfos , spentTxsIds) = fmap (uniqueWithCount . mconcat) $ unzip $ txInfo <$> HK.blockTxns block
+  let (txInfos , spentTxsIds) = fmap (uniqueWithCount . mconcat) $ unzip $ txInfoFromBlockTx <$> HK.blockTxns block
   -- timeLog $ "spentTxsIds: " <> showt (length spentTxsIds)
-  uniqueSpentTxs <- fmap mconcat $ mapConcurrently (mapM spentTxSource) $ mkChunks 100 spentTxsIds
+  uniqueSpentTxInfos <- fmap mconcat $ mapConcurrently (mapM spentTxInfo) $ mkChunks 100 spentTxsIds
+  let uniqueSpentTxs = txStoredTx <$> uniqueSpentTxInfos
   blockAddressFilter <- encodeBtcAddrFilter =<<
     withInputTxs uniqueSpentTxs (makeBtcFilter isErgveinIndexable block)
   let blockHeaderHash = HK.getHash256 $ HK.getBlockHash $ HK.headerHash $ HK.blockHeader block
       prevBlockHeaderHash = HK.getHash256 $ HK.getBlockHash $ HK.prevBlock $ HK.blockHeader block
       blockMeta = BlockMetaInfo BTC txBlockHeight blockHeaderHash prevBlockHeaderHash blockAddressFilter
   let spentTxsIdsMap = Map.mapKeys hkTxHashToEgv $ Map.fromList spentTxsIds
-  pure $ BlockInfo blockMeta spentTxsIdsMap txInfos
+  pure $ BlockInfo blockMeta [] txInfos
   where
     blockTxMap = mapBy (HK.txHash) $ HK.blockTxns block
-    spentTxSource :: (MonadBaseControl IO m, BitcoinApiMonad m, HasFiltersDB m, MonadLogger m) => (HK.TxHash, Word32) -> m HK.Tx
-    spentTxSource (txInId, _) = case Map.lookup txInId blockTxMap of
-      Just    sourceTx -> pure sourceTx
+    spentTxInfo :: (MonadBaseControl IO m, BitcoinApiMonad m, HasFiltersDB m, MonadLogger m) => (HK.TxHash, Word32) -> m TxInfoStored
+    spentTxInfo (txInId, spent) = case Map.lookup txInId blockTxMap of
+      Just    sourceTx -> pure $ txInfoFromMapTx txInId sourceTx spent
       Nothing          -> do
-        etx <- getTxFromCache $ hkTxHashToEgv txInId
+        etx <- getTxInfoFromCache txInId spent
         case etx of
           Left _ -> do
             logWarnN $ "[blockTxInfos]: Failed to get a Tx from DB. Trying the node. " <> showt txInId
-            getTxFromNode txInId
+            getTxInfoFromNode txInId
           Right tx -> pure tx
 
-    txInfo :: HK.Tx -> (TxInfo, [HK.TxHash])
-    txInfo tx = let
-      withoutDataCarrier = none HK.isDataCarrier . HK.decodeOutputBS . HK.scriptOutput
-      info = TxInfo { txHash = hkTxHashToEgv $ HK.txHash tx
-                    , txBytes = egvSerialize BTC tx
-                    , txOutputsCount = fromIntegral $ length $ filter withoutDataCarrier $  HK.txOut tx
+    txInfoFromBlockTx :: HK.Tx -> (TxInfo, [HK.TxHash])
+    txInfoFromBlockTx tx = let
+      info = TxInfo { txInfoHash    = hkTxHashToEgv $ HK.txHash tx
+                    , txInfoBytes   = egvSerialize BTC tx
+                    , txInfoUnspent = calcUnspentOuts tx
                     }
       withoutCoinbaseTx = filter $ (/= HK.nullOutPoint)
       spentTxInfo = HK.outPointHash <$> (withoutCoinbaseTx $ HK.prevOutput <$> HK.txIn tx)
       in (info, spentTxInfo)
 
+    txInfoFromMapTx :: HK.TxHash -> HK.Tx -> Word32 -> TxInfoStored
+    txInfoFromMapTx thash tx spent =
+      let unsp = calcUnspentOuts tx - spent
+      in TxInfoStored {
+          txStoredHash    = hkTxHashToEgv thash
+        , txStoredTx      = tx
+        , txStoredHeight  = fromIntegral txBlockHeight
+        , txStoredMeta    = if unsp <= 0 then Nothing else Just $ TxRecMeta unsp $ egvSerialize BTC tx
+        }
+
 actualHeight :: (Monad m, BitcoinApiMonad m) => m BlockHeight
 actualHeight = fromIntegral <$> nodeRpcCall getBlockCount
 
-getTxFromCache :: (HasFiltersDB m, MonadLogger m)
-  => TxHash -> m (Either String HK.Tx)
-getTxFromCache thash = do
+getTxInfoFromCache :: (HasFiltersDB m, MonadLogger m)
+  => HK.TxHash -> Word32 -> m (Either String TxInfoStored)
+getTxInfoFromCache thash spent = do
   db <- getFiltersDb
-  src <- getParsedExact BTC "getTxFromCache" db $ txRawKey thash
-  pure $ egvDeserialize BTC $ unTxRecBytes src
+  let egvTHash = hkTxHashToEgv thash
+  TxRec{..} <- getParsedExact BTC "getTxInfoFromCache" db $ txRecKey egvTHash
+  pure $ case txRecMeta of
+    Nothing -> Left "No record with given TxHash. Fallback"
+    Just TxRecMeta{..} -> case egvDeserialize BTC txMetaBytes of
+      Left err -> Left err
+      Right (tx :: HK.Tx) -> let unsp = txMetaUnspent - spent in
+        Right $ TxInfoStored egvTHash tx txRecHeight $
+          if unsp <= 0 then Nothing else Just $ TxRecMeta unsp txMetaBytes
 
-getTxFromNode :: (BitcoinApiMonad m, MonadLogger m, MonadBaseControl IO m, HasFiltersDB m)
-  => HK.TxHash -> m HK.Tx
-getTxFromNode thash = do
+getTxInfoFromNode :: (BitcoinApiMonad m, MonadLogger m, MonadBaseControl IO m, HasFiltersDB m)
+  => HK.TxHash -> m TxInfoStored
+getTxInfoFromNode thash = do
+  let egvTHash = hkTxHashToEgv thash
   db <- getFiltersDb
-  txMeta <- getParsedExact BTC "getTxFromNode" db $ txMetaKey $ hkTxHashToEgv thash
-  blk <- getBtcBlock $ fromIntegral $ txMetaHeight txMeta
+  txrec <- getParsedExact BTC "getTxInfoFromNode" db $ txRecKey egvTHash
+  blk <- getBtcBlock $ fromIntegral $ txRecHeight txrec
   let txChunks = mkChunks 100 $ HK.blockTxns blk
   txs <- fmap mconcat $ mapConcurrently (pure . catMaybes . parMap rpar comparator) txChunks
   case txs of
-    [] -> txGettingError $ txMetaHeight txMeta
-    tx:_ -> pure tx
+    [] -> txGettingError $ txRecHeight txrec
+    tx:_ -> pure $ TxInfoStored egvTHash tx (txRecHeight txrec) Nothing
   where
     comparator tx = if thash == HK.txHash tx then Just tx else Nothing
     txGettingError h = error $ "Failed to get tx from block #" ++ show h ++ " TxHash: " ++ show thash
@@ -153,3 +171,11 @@ timeLog :: (MonadLogger m, MonadIO m) => Text -> m ()
 timeLog t = do
   now <- liftIO $ getCurrentTime
   logInfoN $ "["<> showt now <> "] " <> t
+
+calcUnspentOuts :: HK.Tx -> Word32
+calcUnspentOuts = fromIntegral . length . filter withoutDataCarrier . HK.txOut
+{-# INLINE calcUnspentOuts #-}
+
+withoutDataCarrier :: HK.TxOut -> Bool
+withoutDataCarrier = none HK.isDataCarrier . HK.decodeOutputBS . HK.scriptOutput
+{-# INLINE withoutDataCarrier #-}

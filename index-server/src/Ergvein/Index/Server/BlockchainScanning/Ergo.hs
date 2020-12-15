@@ -20,15 +20,16 @@ import qualified Data.Map.Strict as M
 
 txInfo :: ApiMonad m => ErgoTransaction -> m ([TxInfo], [TxHash])
 txInfo tx = do
-  let info = TxInfo { txHash =  ErgTxHash . ErgTxId $ BSS.toShort $ unTransactionId $ transactionId (tx :: ErgoTransaction)
-                    , txBytes = mempty
-                    , txOutputsCount = fromIntegral $ length $ dataInputs tx
-                    }
-  txIns <- forM (dataInputs tx) txInInfo
-  let spentTxIds = ErgTxHash . ErgTxId . BSS.toShort . unTransactionId . fromJust . (transactionId :: ErgoTransactionOutput -> Maybe TransactionId) <$> txIns
-  pure $ ([info], spentTxIds)
-  where
-    txInInfo txIn = UtxoApi.getById $ boxId (txIn :: ErgoTransactionDataInput)
+  pure ([], []) -- TODO: fix this when adding ERGO
+  -- let info = TxInfo { txInfoHash =  ErgTxHash . ErgTxId $ BSS.toShort $ unTransactionId $ transactionId (tx :: ErgoTransaction)
+  --                   , txInfoBytes = mempty
+  --                   , txInfoUnspent = fromIntegral $ length $ dataInputs tx
+  --                   }
+  -- txIns <- forM (dataInputs tx) txInInfo
+  -- let spentTxIds = ErgTxHash . ErgTxId . BSS.toShort . unTransactionId . fromJust . (transactionId :: ErgoTransactionOutput -> Maybe TransactionId) <$> txIns
+  -- pure $ ([info], spentTxIds)
+  -- where
+  --   txInInfo txIn = UtxoApi.getById $ boxId (txIn :: ErgoTransactionDataInput)
 
 blockTxInfos :: ApiMonad m => FullBlock -> BlockHeight -> m BlockInfo
 blockTxInfos block txBlockHeight = do
@@ -38,7 +39,7 @@ blockTxInfos block txBlockHeight = do
       blockAddressFilter = mempty --TODO
       spentMap = M.fromList $ (,0) <$> spentTxsIds --TODO
       blockMeta = BlockMetaInfo ERGO (fromIntegral txBlockHeight) blockHeaderHash prevBlockHeaderHash blockAddressFilter
-  pure $ BlockInfo blockMeta spentMap txInfos
+  pure $ BlockInfo blockMeta [] txInfos
 
 actualHeight :: ApiMonad m => m BlockHeight
 actualHeight = do

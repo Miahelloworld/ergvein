@@ -5,11 +5,10 @@ module Ergvein.Index.Server.DB.Schema.Filters
   , ScannedHeightRec(..)
   , BlockMetaRecKey(..)
   , BlockMetaRec(..)
-  , TxRecBytes(..)
+  , TxRec(..)
   , TxRecMeta(..)
   , TxRawKey(..)
-  , txRawKey
-  , txMetaKey
+  , txRecKey
   , scannedHeightTxKey
   , metaRecKey
   , unPrefixedKey
@@ -17,6 +16,7 @@ module Ergvein.Index.Server.DB.Schema.Filters
   , schemaVersion
   ) where
 
+import Control.DeepSeq
 import Crypto.Hash.SHA256
 import Data.Attoparsec.Binary
 import Data.Attoparsec.ByteString as Parse
@@ -42,8 +42,7 @@ data KeyPrefix
   = SchemaVersion
   | ScannedHeight
   | Meta
-  | TxRaw
-  | TxMeta
+  | Tx
   deriving Enum
 
 schemaVersion :: ByteString
@@ -67,24 +66,24 @@ data ScannedHeightRec = ScannedHeightRec
 
 --Tx
 
-txRawKey :: TxHash -> ByteString
-txRawKey = keyString TxRaw . TxRawKey
-{-# INLINE txRawKey #-}
-
-txMetaKey :: TxHash -> ByteString
-txMetaKey = keyString TxMeta . TxRawKey
-{-# INLINE txMetaKey #-}
+txRecKey :: TxHash -> ByteString
+txRecKey = keyString Tx . TxRawKey
+{-# INLINE txRecKey #-}
 
 data TxRawKey = TxRawKey {unTxRawKey :: !TxHash }
   deriving (Generic, Show, Eq, Ord, Serialize)
 
-data TxRecBytes = TxRecBytes { unTxRecBytes :: !ByteString }
-  deriving (Generic, Show, Eq, Ord)
+data TxRecMeta = TxRecMeta {
+  txMetaUnspent :: !Word32
+, txMetaBytes   :: !ByteString
+} deriving (Generic, Show, Eq, Ord)
 
-data TxRecMeta = TxRecMeta
-  { txMetaHeight  :: !Word32
-  , txMetaUnspent :: !Word32
-  } deriving (Generic, Show, Eq, Ord)
+instance NFData TxRecMeta
+
+data TxRec = TxRec {
+  txRecHeight  :: !Word32
+, txRecMeta    :: !(Maybe TxRecMeta)
+} deriving (Generic, Show, Eq, Ord)
 
 --BlockMeta
 
@@ -108,7 +107,6 @@ schemaVersionRecKey  = keyString SchemaVersion $ mempty @String
 
 data SchemaVersionRec = Text  deriving (Generic, Show, Eq, Ord)
 
-
 -- ===========================================================================
 --           instances EgvSerialize
 -- ===========================================================================
@@ -117,20 +115,18 @@ instance EgvSerialize ScannedHeightRec where
   egvSerialize _ (ScannedHeightRec sh) = BL.toStrict . BB.toLazyByteString $ BB.word64LE sh
   egvDeserialize _ = parseOnly $ ScannedHeightRec <$> anyWord64le
 
-instance EgvSerialize TxRecMeta where
-  egvSerialize _ TxRecMeta{..} = BL.toStrict . BB.toLazyByteString $ if txMetaUnspent == 0
-    then BB.int8 0 <> BB.word32LE txMetaHeight
-    else BB.int8 1 <> BB.word32LE txMetaHeight <> BB.word32LE txMetaUnspent
+instance EgvSerialize TxRec where
+  egvSerialize _ TxRec{..} = BL.toStrict . BB.toLazyByteString $ case txRecMeta of
+    Nothing -> BB.int8 0 <> BB.word32LE txRecHeight
+    Just (TxRecMeta unsp raw) ->
+      BB.int8 1 <> BB.word32LE txRecHeight <> BB.word32LE unsp <> buildBS raw
+
   egvDeserialize _ = parseOnly $ do
     i <- anyWord8
     h <- anyWord32le
     if i == 0
-      then pure $ TxRecMeta h 0
-      else TxRecMeta h <$> anyWord32le
-
-instance EgvSerialize TxRecBytes where
-  egvSerialize _ = BL.toStrict . BB.toLazyByteString . buildBS . unTxRecBytes
-  egvDeserialize _ = fmap TxRecBytes . parseOnly parseBS
+      then pure $ TxRec h Nothing
+      else fmap (TxRec h . Just) $ TxRecMeta <$> anyWord32le <*> parseBS
 
 instance EgvSerialize BlockMetaRec where
   egvSerialize _ (BlockMetaRec hd filt) = BL.toStrict . BB.toLazyByteString $ let

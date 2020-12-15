@@ -2,6 +2,7 @@ module Ergvein.Index.Server.DB.Serialize
   (
     EgvSerialize(..)
   , putTxInfosAsRecs
+  , putStoredTxInfosAsRecs
   , serializeWord32
   , deserializeWord32
   ) where
@@ -37,9 +38,13 @@ deserializeWord32 = parseOnly anyWord32le
 {-# INLINE deserializeWord32 #-}
 
 putTxInfosAsRecs :: Currency -> BlockHeight -> [TxInfo] -> LDB.WriteBatch
-putTxInfosAsRecs cur bheight infos = mconcat $ parMap rpar putI (force infos)
+putTxInfosAsRecs cur bheight infos = parMap rpar putI (force infos)
   where
-    putI TxInfo{..} = let
-      p1 = LDB.Put (txRawKey txHash) $ egvSerialize cur $ TxRecBytes txBytes
-      p2 = LDB.Put (txMetaKey txHash) $ egvSerialize cur $ TxRecMeta (fromIntegral bheight) txOutputsCount
-      in [p1, p2]
+    putI TxInfo{..} = LDB.Put (txRecKey txInfoHash) $ egvSerialize cur $
+      TxRec (fromIntegral bheight) $ Just $ TxRecMeta txInfoUnspent txInfoBytes
+
+putStoredTxInfosAsRecs :: Currency -> [TxInfoStored] -> LDB.WriteBatch
+putStoredTxInfosAsRecs cur infos = parMap rpar putI (force infos)
+  where
+    putI TxInfoStored{..} = LDB.Put (txRecKey txStoredHash) $ egvSerialize cur $
+      TxRec txStoredHeight txStoredMeta
