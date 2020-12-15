@@ -127,6 +127,7 @@ library
       , ergvein-wallet-types
       --
       , hschain-control
+      , hschain-crypto
       , hschain-net
       , hschain-db
       , hschain-logger

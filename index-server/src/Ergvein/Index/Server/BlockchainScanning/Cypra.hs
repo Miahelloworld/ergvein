@@ -8,11 +8,15 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Class
 import Control.Immortal
+import qualified Data.ByteString.Short as BSS
 
+import Ergvein.Types.Currency
+import Ergvein.Types.Transaction
 import Ergvein.Index.Server.Monad
 import Ergvein.Index.Server.BlockchainScanning.Types
 
 import HSChain.Control.Channels (awaitIO)
+import qualified HSChain.Crypto             as PoW
 import qualified HSChain.Network.TCP        as PoW
 import qualified HSChain.Store.Query        as PoW
 import qualified HSChain.Logger             as PoW
@@ -51,5 +55,19 @@ scanThread = create $ \_ -> do
                           }
 
 
-scanBlock :: PoW.Block (Cypra.UTXOBlock t) -> BlockInfo
-scanBlock = undefined
+scanBlock :: Cypra.UtxoPOWConfig t => PoW.Block (Cypra.UTXOBlock t) -> BlockInfo
+scanBlock b = BlockInfo
+  { blockInfoMeta       = BlockMetaInfo
+    { blockMetaCurrency                = CYPRA
+    , blockMetaBlockHeight             = let PoW.Height h = PoW.blockHeight b
+                                         in fromIntegral h
+    , blockMetaHeaderHash              = BSS.toShort $ PoW.encodeToBS $ PoW.blockID b
+    , blockMetaPreviousHeaderBlockHash = BSS.toShort $ PoW.encodeToBS $ case PoW.prevBlock b of
+        Nothing  -> error "scanBlock: genesis block"
+        Just bid -> bid
+    , blockMetaAddressFilter           = undefined
+    }
+  , spentTxOutputs      = undefined
+  , blockContentTxInfos = undefined
+  }
+  where
