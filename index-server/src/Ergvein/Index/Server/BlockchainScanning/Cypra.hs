@@ -10,9 +10,9 @@ import Control.Monad.Trans.Class
 import Control.Immortal
 
 import Ergvein.Index.Server.Monad
+import Ergvein.Index.Server.BlockchainScanning.Types
 
 import HSChain.Control.Channels (awaitIO)
-import qualified HSChain.Network.Types      as PoW
 import qualified HSChain.Network.TCP        as PoW
 import qualified HSChain.Store.Query        as PoW
 import qualified HSChain.Logger             as PoW
@@ -28,7 +28,7 @@ scanThread = create $ \_ -> do
   PoW.withConnection dbPath $ \conn ->
     PoW.withLogEnv "" "" (PoW.makeScribe <$> loggers) $ \logEnv ->
       Cypra.runUTXOT logEnv conn $ evalContT $ do
-        (db, bIdx, sView) <- lift $ Cypra.utxoStateView Cypra.genesisMock
+        (db, bIdx, _sView) <- lift $ Cypra.utxoStateView Cypra.genesisMock
         let c0 = PoW.createLightConsensus Cypra.genesisMock bIdx
         pow <- PoW.lightNode netcfg net db c0
         -- Report to stdout
@@ -42,10 +42,14 @@ scanThread = create $ \_ -> do
         return ()
   where
     dbPath  = ""
-    loggers = [ PoW.ScribeSpec PoW.ScribeTXT Nothing PoW.DebugS PoW.V2
+    loggers = [ PoW.ScribeSpec PoW.ScribeJSON Nothing PoW.DebugS PoW.V2
               ]
     net     = PoW.newNetworkTcp 10101
-    netcfg  = PoW.NodeCfg { PoW.nKnownPeers     = 3
-                         , PoW.nConnectedPeers = 3
-                         , PoW.initialPeers    = [ read "192.168.1.4:40000" ]
-                         }
+    netcfg  = PoW.NodeCfg { PoW.nKnownPeers     = 1
+                          , PoW.nConnectedPeers = 1
+                          , PoW.initialPeers    = [ read "192.168.1.4:40000" ]
+                          }
+
+
+scanBlock :: PoW.Block (Cypra.UTXOBlock t) -> BlockInfo
+scanBlock = undefined
