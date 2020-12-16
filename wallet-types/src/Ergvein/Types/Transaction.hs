@@ -28,6 +28,7 @@ module Ergvein.Types.Transaction (
     , TxId
     , BtcTxId
     , ErgTxId(..)
+    , CypTxId(..)
     , TxHash(..)
     , toBtcTxHash
     , toErgTxHash
@@ -255,10 +256,18 @@ instance SafeCopy ErgTxId where
   putCopy = contain . put
   getCopy = contain get
 
+newtype CypTxId = CypTxId { unCypTxId :: ShortByteString }
+  deriving (Eq, Ord, Show, Read, Hashable, Serialize, Generic, NFData)
+
+instance SafeCopy CypTxId where
+  putCopy = contain . put
+  getCopy = contain get
+
 -- | Hash of transaction
 data TxHash
   = BtcTxHash {getBtcTxHash :: !BtcTxId}
   | ErgTxHash {getErgTxHash :: !ErgTxId}
+  | CypTxHash {getCypTxHash :: !CypTxId}
   deriving (Eq, Show, Read, Ord, Hashable, Serialize, Generic, NFData)
 
 instance SafeCopy TxHash where
