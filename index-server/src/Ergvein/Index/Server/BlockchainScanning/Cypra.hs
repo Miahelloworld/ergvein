@@ -2,6 +2,7 @@
 module Ergvein.Index.Server.BlockchainScanning.Cypra where
 
 import Codec.Serialise (serialise)
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
@@ -9,6 +10,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Class
 import Control.Immortal
+import Control.Lens
 import Data.Proxy
 -- import Data.Maybe
 import Data.Foldable
@@ -20,7 +22,8 @@ import qualified Data.Map.Strict       as Map
 import qualified Haskoin   as HK
 import Unsafe.Coerce
 
-import HSChain.Control.Channels (awaitIO)
+import HSChain.Control.Channels (awaitIO,await)
+import HSChain.Control.Util     (atomicallyIO)
 import qualified HSChain.Crypto             as PoW
 import qualified HSChain.Network.TCP        as PoW
 import qualified HSChain.Store.Query        as PoW
@@ -28,6 +31,7 @@ import qualified HSChain.Logger             as PoW
 import qualified HSChain.PoW.P2P            as PoW
 import qualified HSChain.PoW.P2P.Types      as PoW
 import qualified HSChain.PoW.Types          as PoW
+import qualified HSChain.PoW.BlockIndex     as PoW
 import qualified HSChain.PoW.Consensus      as PoW
 import qualified Hschain.Utxo.Pow.App       as Cypra
 import qualified Hschain.Utxo.Pow.App.Types as Cypra
@@ -54,20 +58,93 @@ scanThread = create $ \_ -> do
         void $ liftIO $ forkIO $ do
           ch <- atomically $ PoW.bestHeadUpdates pow
           forever $ do bh <- fst . PoW._bestLightHead <$> awaitIO ch
-                       print (PoW.bhHeight bh, PoW.bhBID bh)
-                       print $ PoW.retarget bh
-        --
-        liftIO $ forever $ threadDelay maxBound
-        return ()
+                       print ("HEAD",PoW.bhHeight bh, PoW.bhBID bh)
+        -- Main loop
+        -- FIXME: Here we _always_ start from genesis
+        let Just bh0 = PoW.lookupIdx (PoW.blockID Cypra.genesisMock) bIdx
+            st0 = IdxState { currentHead   = bh0
+                           , blocksToFetch = []
+                           }
+        headUpdates <- atomicallyIO $ PoW.bestHeadUpdates pow
+        let loop waitBlk st = do
+              evt <- atomicallyIO
+                $  view (PoW.bestLightHead . _1 . to NewHead) <$> await headUpdates
+               <|> NewBlock <$> waitBlk
+              (st',cmd) <- transition st evt
+              liftIO $ print cmd
+              case cmd of
+                NoOp           -> do loop waitBlk st'
+                FetchBlock bid -> do waitBlk' <- atomicallyIO $ PoW.fetchBlock pow bid
+                                     loop waitBlk' st'
+        lift $ loop retry st0
   where
     dbPath  = ""
-    loggers = [ PoW.ScribeSpec PoW.ScribeJSON Nothing PoW.DebugS PoW.V2
+    loggers = [ PoW.ScribeSpec PoW.ScribeJSON (Just "./cypralog") PoW.DebugS PoW.V2
               ]
     net     = PoW.newNetworkTcp 10101
     netcfg  = PoW.NodeCfg { PoW.nKnownPeers     = 1
                           , PoW.nConnectedPeers = 1
                           , PoW.initialPeers    = [ read "192.168.1.4:40000" ]
                           }
+
+
+type CypBCh = Cypra.UTXOBlock Cypra.MockChain
+
+-- | State of indexer
+data IdxState = IdxState
+  { currentHead :: PoW.BH CypBCh
+    -- ^ Last block we've fetched and processes.
+  , blocksToFetch :: [PoW.BH CypBCh]
+    -- ^ List of blocks we need to fetch.
+  }
+  deriving Show
+
+data Event
+  = NewHead  (PoW.BH CypBCh)
+  -- ^ We've got new head
+  | NewBlock (PoW.Block CypBCh)
+  -- ^ We've fetched new block
+  deriving Show
+
+data Command
+  = NoOp
+  | FetchBlock (PoW.BlockID CypBCh)
+  deriving Show
+
+transition :: MonadIO m => IdxState -> Event -> m (IdxState, Command)
+-- We've got new head.
+transition IdxState{..} (NewHead newHead) = do
+  -- FIXME: We don't implement rollback
+  let toPath (PoW.RevertBlock _ _ )  = error "Cypra: rollback is not implemented"
+      toPath  PoW.NoChange           = []
+      toPath (PoW.ApplyBlock bid xs) = bid : toPath xs
+  -- liftIO $ print $ PoW.bhHeight <$> path
+  let newBlocks = reverse $ toPath path
+  pure ( IdxState { blocksToFetch = newBlocks
+                  , ..
+                  }
+       , case (blocksToFetch, newBlocks) of
+           (_     , []    )                -> NoOp
+           (bOld:_, bNew:_) | bOld == bNew -> NoOp
+           (_     , bNew:_)                -> FetchBlock (PoW.bhBID bNew)
+       )
+  where
+    path = PoW.makeBlockIndexPath id currentHead newHead
+-- We've got new block
+transition st@IdxState{..} (NewBlock blk)
+  | bh:rest <- blocksToFetch
+  , PoW.bhBID bh == PoW.blockID blk = do
+      liftIO $ print ("BLOCK",PoW.bhHeight bh, PoW.bhBID bh)
+      pure ( IdxState { currentHead = bh
+                      , blocksToFetch = rest
+                      }
+           , case rest of
+               []    -> NoOp
+               (b:_) -> FetchBlock $ PoW.bhBID b
+           )
+  | otherwise = pure (st, NoOp)
+
+
 
 
 scanBlock
