@@ -15,7 +15,7 @@ in rec {
       lib = pkgs.haskell.lib;
       hschainRev = {
         "url" = "https://github.com/hexresearch/hschain";
-        "rev" = "4fa995363cc5d88da69927aefe990b8a110eb71c";
+        "rev" = "dfb3f81379b984c6d9288e93b90d8d29179fa191";
         "ref" = "master";
       };
       callHSChain = name: hsNew.callCabal2nixWithOptions name
