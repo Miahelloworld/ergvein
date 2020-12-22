@@ -1,18 +1,21 @@
 -- |
 module Ergvein.Index.Server.BlockchainScanning.Cypra where
 
-import Codec.Serialise (serialise)
+import Codec.Serialise (serialise,deserialiseOrFail)
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.Logger
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Class
+import Control.Monad.Trans.Control
 import Control.Immortal
 import Control.Lens
 import Data.Proxy
--- import Data.Maybe
+import Data.Coerce
+import Data.Maybe
 import Data.Foldable
 import qualified Data.HashSet          as HS
 import qualified Data.ByteString.Short as BSS
@@ -25,6 +28,7 @@ import Unsafe.Coerce
 import HSChain.Control.Channels (awaitIO,await)
 import HSChain.Control.Util     (atomicallyIO)
 import qualified HSChain.Crypto             as PoW
+import qualified HSChain.Crypto.SHA         as PoW
 import qualified HSChain.Network.TCP        as PoW
 import qualified HSChain.Store.Query        as PoW
 import qualified HSChain.Logger             as PoW
@@ -45,6 +49,10 @@ import Ergvein.Index.Server.BlockchainScanning.Types
 import Ergvein.Filters.Btc       (BtcAddrFilter(..),encodeBtcAddrFilter)
 import Ergvein.Filters.Btc.Index
 import Ergvein.Filters.GCS
+import Ergvein.Index.Server.DB.Monad
+import Ergvein.Index.Server.DB.Utils
+import Ergvein.Index.Server.DB.Queries
+import Ergvein.Index.Server.DB.Schema.Filters
 
 scanThread :: ServerM Thread
 scanThread = create $ \_ -> do
@@ -58,7 +66,7 @@ scanThread = create $ \_ -> do
         void $ liftIO $ forkIO $ do
           ch <- atomically $ PoW.bestHeadUpdates pow
           forever $ do bh <- fst . PoW._bestLightHead <$> awaitIO ch
-                       print ("HEAD",PoW.bhHeight bh, PoW.bhBID bh)
+                       print ("HEAD"::String,PoW.bhHeight bh, PoW.bhBID bh)
         -- Main loop
         -- FIXME: Here we _always_ start from genesis
         let Just bh0 = PoW.lookupIdx (PoW.blockID Cypra.genesisMock) bIdx
@@ -68,9 +76,9 @@ scanThread = create $ \_ -> do
         headUpdates <- atomicallyIO $ PoW.bestHeadUpdates pow
         let loop waitBlk st = do
               evt <- atomicallyIO
-                $  view (PoW.bestLightHead . _1 . to NewHead) <$> await headUpdates
-               <|> NewBlock <$> waitBlk
-              (st',cmd) <- transition st evt
+                   $  view (PoW.bestLightHead . _1 . to NewHead) <$> await headUpdates
+                  <|> NewBlock <$> waitBlk
+              (st',cmd) <- lift $ transition st evt
               liftIO $ print cmd
               case cmd of
                 NoOp           -> do loop waitBlk st'
@@ -111,7 +119,9 @@ data Command
   | FetchBlock (PoW.BlockID CypBCh)
   deriving Show
 
-transition :: MonadIO m => IdxState -> Event -> m (IdxState, Command)
+transition
+  :: (HasBtcRollback m, HasFiltersDB m, HasIndexerDB m, MonadLogger m, MonadIO m, MonadBaseControl IO m)
+  => IdxState -> Event -> m (IdxState, Command)
 -- We've got new head.
 transition IdxState{..} (NewHead newHead) = do
   -- FIXME: We don't implement rollback
@@ -134,8 +144,9 @@ transition IdxState{..} (NewHead newHead) = do
 transition st@IdxState{..} (NewBlock blk)
   | bh:rest <- blocksToFetch
   , PoW.bhBID bh == PoW.blockID blk = do
-      liftIO $ print ("BLOCK",PoW.bhHeight bh, PoW.bhBID bh)
-      pure ( IdxState { currentHead = bh
+      liftIO $ print ("BLOCK"::String,PoW.bhHeight bh, PoW.bhBID bh)
+      addBlockInfo =<< scanBlock blk
+      pure ( IdxState { currentHead   = bh
                       , blocksToFetch = rest
                       }
            , case rest of
@@ -145,10 +156,8 @@ transition st@IdxState{..} (NewBlock blk)
   | otherwise = pure (st, NoOp)
 
 
-
-
 scanBlock
-  :: forall t m. (Cypra.UtxoPOWConfig t, HasTxIndex m)
+  :: forall t m. (Cypra.UtxoPOWConfig t, HasFiltersDB m, MonadLogger m)
   => PoW.Block (Cypra.UTXOBlock t) -> m BlockInfo
 scanBlock b = do
   flt <- encodeBtcAddrFilter <$> makeCypFilter b
@@ -179,17 +188,20 @@ txInfo _ tx = TxInfo
   , txOutputsCount = fromIntegral $ length $ Cypra.tx'outputs tx
   }
 
+-- Hashes of transaction which created spent output
 spentInputs :: forall t. Cypra.UtxoPOWConfig t => Proxy t -> PoW.Tx (Cypra.UTXOBlock t) -> [TxHash]
-spentInputs _
-  -- FIXME: We need to number outputs explicitly
-  = undefined
-  -- = map (unsafeCoerce . BSS.toShort . PoW.encodeToBS . undefined)
-  -- . toList . Cypra.tx'inputs
+spentInputs _ tx
+  = tx ^.. Cypra.tx'inputsL . each . Cypra.boxInputRef'idL . to toCypTxHash
 
 
 encodeShort :: PoW.ByteRepr a => a -> BSS.ShortByteString
 encodeShort = BSS.toShort . PoW.encodeToBS
 
+toCypTxHash :: Cypra.BoxId -> TxHash
+toCypTxHash (Cypra.BoxId tid _) = cypTxHash tid
+
+cypTxHash :: Cypra.TxId -> TxHash
+cypTxHash (Cypra.TxId h) = CypTxHash $ CypTxId $ encodeShort h
 
 ----------------------------------------------------------------
 -- Making of filters
@@ -197,14 +209,14 @@ encodeShort = BSS.toShort . PoW.encodeToBS
 -- Implemented here for ease of development. To be moved into erg
 
 makeCypFilter
-  :: (HasTxIndex m, Cypra.UtxoPOWConfig t)
+  :: (HasFiltersDB m, MonadLogger m, Cypra.UtxoPOWConfig t)
   => PoW.Block (Cypra.UTXOBlock t) -> m BtcAddrFilter
 makeCypFilter b = do
   -- Fetch inputs for each transacion
   inputSet <- collectInputs b
   let totalSet = HS.fromList $ outputSet <> inputSet
   pure BtcAddrFilter
-      { btcAddrFilterN   = undefined
+      { btcAddrFilterN   = fromIntegral $ length totalSet
       , btcAddrFilterGcs = constructGcs btcDefP sipkey btcDefM totalSet
       }
   where
@@ -213,20 +225,38 @@ makeCypFilter b = do
               $ toList
               $ Cypra.ubData $ PoW.blockData b
     encodeOut Cypra.Box{..} = BL.toStrict $ serialise (box'script, box'args)
-    -- FIXME: Sadly there's no way to construct Hash256. So we have to
-    --        resort to unsafeCoerce in order to convert hashes.
-    sipkey    = blockSipHash $ HK.BlockHash $ unsafeCoerce $ BSS.toShort $ PoW.encodeToBS $ PoW.blockID b
+    sipkey    = blockSipHash $ HK.BlockHash $ toHKhash $ coerce $ PoW.blockID b
+
+
+-- FIXME: Sadly there's no way to construct Hash256. So we have to
+--        resort to unsafeCoerce in order to convert hashes.
+toHKhash :: PoW.Hash PoW.SHA256 -> HK.Hash256
+toHKhash = unsafeCoerce . BSS.toShort . PoW.encodeToBS
 
 
 collectInputs
-  :: (HasTxIndex m, Cypra.UtxoPOWConfig t)
+  :: forall m t. (HasFiltersDB m, MonadLogger m, Cypra.UtxoPOWConfig t)
   => PoW.Block (Cypra.UTXOBlock t) -> m [BS.ByteString]
-collectInputs _ = pure []
--- FIXME: We should use same schema as bitcoin
-{-
-  = fmap catMaybes
-  . mapM queryOutPoint
-  . fmap undefined
-  . concatMap (toList . Cypra.tx'inputs)
-  . drop 1 . toList . Cypra.ubData . PoW.blockData
--}
+collectInputs b = do
+  txs <- traverse fetchSource $ spentTIDs
+  pure $ BL.toStrict . serialise <$> catMaybes txs
+  where
+    -- FIXME: Do something about fact that TxId & TxID are nominally different
+    blockTxMap = mapBy (cypTxHash . coerce . PoW.txID @(Cypra.UTXOBlock t))
+               $ toList $ Cypra.ubData $ PoW.blockData b
+    -- Hashes of transaction which had spent outputs
+    spentTIDs  = concatMap (toListOf $ Cypra.tx'inputsL . each . Cypra.boxInputRef'idL . to toCypTxHash)
+               $ drop 1 $ toList $ Cypra.ubData $ PoW.blockData b
+    -- Fetch transaction from database
+    fetchSource tid = do
+      case tid `Map.lookup` blockTxMap of
+        Just _  -> pure Nothing
+        Nothing -> Just <$> fromCache tid
+
+fromCache :: (HasFiltersDB m, MonadLogger m) => TxHash -> m (PoW.Tx (Cypra.UTXOBlock t))
+fromCache txInId = do
+  db  <- getFiltersDb
+  src <- getParsedExact CYPRA "blockTxInfos" db $ txRawKey txInId
+  case deserialiseOrFail $ BL.fromStrict $ unTxRecBytes src of
+    Left err -> error (show err <> " : " <> show src)
+    Right tx -> pure tx
